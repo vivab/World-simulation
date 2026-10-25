@@ -1,11 +1,11 @@
-/* WorldSimulation alpha 0.6 — unrestricted terraforming and grounded natural foliage. */
+/* WorldSimulation alpha 0.6.1 — unified soil and high-zoom terrain detail. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
   const COLORS = ['#e9b56e', '#ca98e2', '#89d4c9', '#e47e83', '#bed678'];
   const NAMES = ['Аурелия', 'Нордхейм', 'Валория', 'Элирия', 'Равенхольд', 'Соларис', 'Аркания', 'Эстерия'];
   const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река', 'Пепелище'];
-  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c', '#a17a55'];
+  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c', '#a98763'];
   const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d', {alpha:false});
   const minimap = document.querySelector('#minimap'), miniCtx = minimap.getContext('2d');
   const $ = id => document.getElementById(id);
@@ -87,8 +87,9 @@
     elements.reset();nature.initialize(seed);drawTerrain();
   }
   function drawTerrain(){
-    // Small blended texture -> full sized cached illustration; no hard pixels.
-    const width=W*2,height=H*2;
+    // Four texels per cell keep blended shorelines crisp at phone zoom.
+    const DETAIL_RES=4;
+    const width=W*DETAIL_RES,height=H*DETAIL_RES;
     const low=document.createElement('canvas');low.width=width;low.height=height;
     const lc=low.getContext('2d');
     const img=lc.createImageData(width,height),d=img.data;
@@ -101,7 +102,7 @@
       }else coloredTiles[i]=colors[terrain[i]];
     }
     for(let py=0;py<height;py++)for(let px=0;px<width;px++){
-      const sx=(px+.5)/2-.5,sy=(py+.5)/2-.5;
+      const sx=(px+.5)/DETAIL_RES-.5,sy=(py+.5)/DETAIL_RES-.5;
       const x0=Math.floor(sx),y0=Math.floor(sy);
       const fx=smooth(sx-x0),fy=smooth(sy-y0);
       const sample=(x,y)=>coloredTiles[at(clamp(x,0,W-1),clamp(y,0,H-1))];
@@ -156,6 +157,74 @@
       }
     }
     drawMinimap();terrainDirty=false;
+  }
+
+
+  // Draw tiny world-space features at close zoom, not an enlarged blurry image.
+  // This pass only visits visible terrain. At far zoom the cached bitmap is used.
+  function drawCloseDetails(){
+    const z=camera.z;
+    if(z<1.15)return;
+    const fade=clamp((z-1.1)/.95,0,.88);
+    const halfW=viewW/(2*z),halfH=viewH/(2*z);
+    const x0=Math.max(0,Math.floor((camera.x-halfW)/TILE)-1);
+    const y0=Math.max(0,Math.floor((camera.y-halfH)/TILE)-1);
+    const x1=Math.min(W,Math.ceil((camera.x+halfW)/TILE)+1);
+    const y1=Math.min(H,Math.ceil((camera.y+halfH)/TILE)+1);
+    const stride=z<1.6?2:1;
+    const seconds=last/1000;
+    let drawn=0;
+    ctx.save();ctx.globalAlpha=fade;ctx.lineCap='round';
+    outer:for(let y=y0;y<y1;y+=stride)for(let x=x0;x<x1;x+=stride){
+      if(++drawn>1900)break outer;
+      const kind=terrain[at(x,y)],seed=hash(x,y,state.seed+351);
+      const ox=x*TILE,oy=y*TILE;
+      const dx=ox+1.3+hash(x,y,state.seed+617)*4.5;
+      const dy=oy+1+hash(x,y,state.seed+912)*5;
+      if(kind===10){ // Loose, warm brown soil: clumps and tiny stones.
+        ctx.fillStyle='rgba(80,56,38,.29)';
+        ctx.beginPath();ctx.ellipse(dx,dy,1.55+seed*.7,.75,-.28,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='rgba(238,202,158,.42)';
+        ctx.beginPath();ctx.ellipse(dx-1.6,dy-1.1,.9,.42,-.3,0,Math.PI*2);ctx.fill();
+        if(seed>.56){
+          ctx.strokeStyle='rgba(83,63,45,.3)';ctx.lineWidth=.42;
+          ctx.beginPath();ctx.moveTo(ox+1,oy+6);
+          ctx.quadraticCurveTo(ox+3.1,oy+4.4,ox+4.9,oy+5.2);ctx.stroke();
+        }
+      }else if(kind===7||kind===2){ // Fine grains and short wind-shaped sand ripples.
+        ctx.strokeStyle='rgba(142,108,63,.28)';ctx.lineWidth=.48;
+        ctx.beginPath();ctx.moveTo(ox+.8,oy+2+seed*2);
+        ctx.quadraticCurveTo(ox+3.4,oy+1+seed*2,ox+6,oy+2.6+seed*2);ctx.stroke();
+        ctx.fillStyle='rgba(255,240,190,.51)';
+        ctx.beginPath();ctx.arc(dx,dy,.55,0,Math.PI*2);ctx.fill();
+      }else if(kind===3||kind===4){ // Individual sprigs show up when approaching grass.
+        if(seed>.18){
+          ctx.strokeStyle='rgba(39,92,48,.53)';ctx.lineWidth=.65;
+          ctx.beginPath();ctx.moveTo(dx,dy+1.5);
+          ctx.quadraticCurveTo(dx-1,dy-.4,dx-1.5,dy-1.7);
+          ctx.moveTo(dx,dy+1.5);ctx.quadraticCurveTo(dx+.7,dy-.7,dx+1.5,dy-1.3);
+          ctx.stroke();
+        }
+      }else if(kind===5||kind===6){ // Stone edges and snow granules.
+        ctx.strokeStyle=kind===6?'rgba(117,140,152,.4)':'rgba(66,75,72,.34)';
+        ctx.lineWidth=.68;ctx.beginPath();
+        ctx.moveTo(dx-2,dy+1);ctx.lineTo(dx-.5,dy-.8);ctx.lineTo(dx+1,dy-.6);ctx.stroke();
+        if(kind===6){ctx.fillStyle='rgba(255,255,255,.63)';
+          ctx.beginPath();ctx.arc(dx-1.5,dy-1.6,.66,0,Math.PI*2);ctx.fill();}
+      }else if(kind===0||kind===1||kind===8){ // Subtle moving wavelets, kept crisp.
+        if(seed>.31){
+          ctx.strokeStyle=kind===0?'rgba(149,201,222,.28)':'rgba(192,237,242,.43)';
+          ctx.lineWidth=.62;ctx.beginPath();
+          const wave=Math.sin(seconds*1.2+x*.54+y*.3)*.5;
+          ctx.moveTo(dx-1.8,dy+wave);ctx.quadraticCurveTo(dx,dy-1+wave,dx+2.1,dy+wave);
+          ctx.stroke();
+        }
+      }else if(kind===9){
+        ctx.strokeStyle='rgba(35,38,40,.4)';ctx.lineWidth=.65;
+        ctx.beginPath();ctx.moveTo(dx-1.4,dy-1);ctx.lineTo(dx+.6,dy+.5);ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // Small illustrated volcanoes with persistent glowing craters.
@@ -419,6 +488,7 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
     ctx.imageSmoothingEnabled=true;ctx.drawImage(worldCanvas,0,0);
+    drawCloseDetails();
     drawVolcanoes(ctx,timestamp/1000);
     elements.draw(ctx);
     nature.drawPlants(ctx,camera,viewW,viewH,timestamp/1000);
