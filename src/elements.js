@@ -2,7 +2,7 @@
    Cells simulate surface effects rather than three-dimensional liquids. */
 (function(global){
   'use strict';
-  global.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerrainChange:changed}){
+  global.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerrainChange:changed,getPlant:plantAt}){
     const WATER=1,FIRE=2,ACID=3,LAVA=4,ASH=9;
     const cells=new Uint8Array(W*H),power=new Uint8Array(W*H);
     const next=new Uint8Array(W*H),nextPower=new Uint8Array(W*H);
@@ -18,8 +18,8 @@
     function place(x,y,type,p=7){
       x|=0;y|=0;if(!inside(x,y))return false;
       const i=index(x,y);
-      if(type===FIRE&&![3,4,7].includes(terrain[i]))return false;
-      if(type===WATER&&terrain[i]<2)return false;
+      if(type===FIRE&&!([3,4].includes(terrain[i])||(plantAt&&plantAt(x,y)>0)))return false;
+      if(type===WATER)return false; // Water is only moisture droplets, not a flooding cell.
       if(type===LAVA&&terrain[i]<2)setTerrain(i,5);
       if(type===LAVA&&terrain[i]===9)setTerrain(i,5);
       cells[i]=type;power[i]=Math.max(power[i],p);dirty=true;return true;
@@ -42,32 +42,19 @@
     function paint(x,y,kind,radius=2){
       x=Math.floor(x);y=Math.floor(y);
       if(kind==='volcano'){addVolcano(x,y);return;}
-      const type={ground:3,sand:7,rock:5,mountain:6,forest:4}[kind];
+      const type={ground:10,sand:7,rock:5,mountain:6}[kind];
       for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
         if(dx*dx+dy*dy>(radius+.25)*(radius+.25))continue;
         const nx=x+dx,ny=y+dy;if(!inside(nx,ny))continue;
         const i=index(nx,ny);
         if(type!==undefined){setTerrain(i,type);
           if(cells[i]){cells[i]=0;power[i]=0;dirty=true;}}
-        else place(nx,ny,kind==='water'?WATER:kind==='fire'?FIRE:kind==='acid'?ACID:LAVA,8);
-      }
-    }
-    function rain(storms){
-      for(const storm of storms){
-        const count=storms.length>45?1:3;
-        for(let k=0;k<count;k++){
-          const r=Math.sqrt(Math.random())*storm.radius/T,a=Math.random()*Math.PI*2;
-          const x=Math.floor(storm.x/T+Math.cos(a)*r),y=Math.floor(storm.y/T+Math.sin(a)*r);
-          if(!inside(x,y))continue;
-          const i=index(x,y);
-          if(cells[i]===FIRE){cells[i]=0;power[i]=0;setTerrain(i,ASH);dirty=true;}
-          else if(terrain[i]>=2&&!cells[i]&&Math.random()<.36)place(x,y,WATER,2);
-        }
+        else if(kind!=='water')place(nx,ny,kind==='fire'?FIRE:kind==='acid'?ACID:LAVA,8);
       }
     }
     const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
     function tick(storms){
-      frame++;rain(storms);
+      frame++;
       for(const volcano of volcanoes){
         volcano.eruption++;
         // Persistent vent: lava leaves the little crater, then moves downhill.
@@ -91,25 +78,7 @@
           const [dx,dy]=dirs[(k+spin)%4],nx=x+dx,ny=y+dy;
           if(inside(nx,ny))nearby.push(index(nx,ny));
         }
-        if(kind===WATER){
-          let destination=-1,best=altitude[i]+.004;
-          for(const j of nearby){
-            if(cells[j]===FIRE){next[j]=nextPower[j]=0;setTerrain(j,ASH);dirty=true;}
-            if(cells[j]===LAVA){
-              next[j]=nextPower[j]=0;next[i]=nextPower[i]=0;
-              setTerrain(j,5);dirty=true;break;
-            }
-            if(terrain[j]<2||cells[j]===ACID||cells[j]===LAVA||next[j]===FIRE)continue;
-            if(next[j]===WATER&&nextPower[j]>=p-1)continue;
-            const h=altitude[j]+(next[j]===WATER?nextPower[j]*.002:0);
-            if(h<best){best=h;destination=j;}
-          }
-          if(destination>=0&&nextPower[i]>1){
-            next[destination]=WATER;nextPower[destination]=Math.min(9,nextPower[destination]+1);
-            nextPower[i]--;dirty=true;
-          }
-          if(Math.random()<.026){nextPower[i]=Math.max(0,nextPower[i]-1);dirty=true;}
-        }else if(kind===FIRE){
+        if(kind===FIRE){
           if(nearby.some(j=>cells[j]===WATER)){
             next[i]=nextPower[i]=0;setTerrain(i,ASH);dirty=true;continue;
           }
@@ -119,9 +88,10 @@
           }
           for(const j of nearby){
             if(cells[j]||next[j])continue;
-            const fuel=terrain[j],chance=fuel===4?.095:fuel===3?.022:fuel===7?.009:0;
+            const fuel=terrain[j],tree=plantAt?plantAt(j%W,Math.floor(j/W)):0;
+            const chance=tree?.105:fuel===4?.095:fuel===3?.022:0;
             if(chance&&Math.random()<chance){
-              next[j]=FIRE;nextPower[j]=fuel===4?8:5;dirty=true;
+              next[j]=FIRE;nextPower[j]=(tree||fuel===4)?8:5;dirty=true;
             }
           }
           if(Math.random()<.36){
@@ -188,7 +158,7 @@
       cells.fill(0);power.fill(0);
       if(Array.isArray(rows))for(const entry of rows.slice(0,W*H)){
         if(!Array.isArray(entry))continue;const [i,t,p]=entry;
-        if(Number.isInteger(i)&&i>=0&&i<cells.length&&Number.isInteger(t)&&t>=1&&t<=4){
+        if(Number.isInteger(i)&&i>=0&&i<cells.length&&Number.isInteger(t)&&t>=2&&t<=4){
           cells[i]=t;power[i]=Math.max(1,Math.min(9,Number(p)||1));
         }
       }
@@ -202,6 +172,12 @@
         volcanoes.push({x:v.x,y:v.y,phase:Number.isFinite(v.phase)?v.phase:0,
           eruption:Number.isFinite(v.eruption)?v.eruption:0});
       }
+    }
+    function extinguish(x,y){
+      if(!inside(x,y))return;
+      const i=index(x,y);
+      if(cells[i]===FIRE){cells[i]=power[i]=0;dirty=true;}
+      if(cells[i]===LAVA){cells[i]=power[i]=0;setTerrain(i,5);dirty=true;}
     }
     function draw(ctx){
       ctx.save();ctx.imageSmoothingEnabled=true;
@@ -229,7 +205,7 @@
       }
     }
     return {paint,step,draw,drawFlames,reset,serialize,restore,restoreVolcanoes,
-      getVolcanoes:()=>volcanoes,getType:(x,y)=>inside(x,y)?cells[index(x,y)]:0,
+      getVolcanoes:()=>volcanoes,getType:(x,y)=>inside(x,y)?cells[index(x,y)]:0,extinguish,
       ignite:(x,y)=>place(x,y,FIRE,7),getCount:()=>cells.reduce((a,b)=>a+(b!==0),0)};
   };
 })(window);
