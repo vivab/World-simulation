@@ -190,13 +190,87 @@
       return {x,y};
     }return null;
   }
+  // Cosmetic village houses are part of the simulation and can burn down.
+  function ensureHouses(city){
+    if(Array.isArray(city.houses))return;
+    const spots=[[-2,-1],[2,-1],[-1,2],[2,2],[-3,1],[0,-3],[3,1],[1,3]];
+    city.houses=[];
+    for(const [dx,dy] of spots){
+      const x=city.x+dx,y=city.y+dy;
+      if(!isLand(x,y))continue;
+      city.houses.push({x,y,hp:100,ruined:false,burning:false});
+      if(city.houses.length===5)break;
+    }
+  }
+  function updateHouses(steps){
+    if(!steps)return;
+    for(const c of state.cities){
+      ensureHouses(c);
+      for(const h of c.houses){
+        if(h.ruined)continue;
+        let heat=0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(elements.getType(h.x+dx,h.y+dy)===2||
+             elements.getType(h.x+dx,h.y+dy)===4)heat++;
+        }
+        // One nearby burning cell can ignite the house; a house fire can leap
+        // to the next building if they are close to one another.
+        if(!h.burning&&heat>0&&Math.random()<.21*steps)h.burning=true;
+        if(!h.burning&&c.houses.some(other=>other!==h&&other.burning&&
+              Math.hypot(other.x-h.x,other.y-h.y)<3.1)&&Math.random()<.035*steps)h.burning=true;
+        if(h.burning){
+          h.hp-=steps*(3.5+Math.min(heat,3)*1.1);
+          if(Math.random()<.12*steps)elements.ignite(h.x,h.y);
+          if(h.hp<=0){
+            h.hp=0;h.burning=false;h.ruined=true;
+            c.pop=Math.max(0,c.pop-3);c.food=Math.max(0,c.food-6);
+            updateStats();
+          }
+        }
+      }
+    }
+  }
+  function drawHouses(ctx,city,clock){
+    ensureHouses(city);
+    for(const h of city.houses){
+      const x=(h.x+.5)*TILE,y=(h.y+.5)*TILE;
+      ctx.fillStyle='rgba(35,47,36,.18)';
+      ctx.beginPath();ctx.ellipse(x+1.5,y+4,7,3,0,0,Math.PI*2);ctx.fill();
+      if(h.ruined){
+        ctx.fillStyle='#6e6664';ctx.beginPath();ctx.moveTo(x-5,y+3);
+        ctx.lineTo(x-5,y-1);ctx.lineTo(x-2,y);ctx.lineTo(x-2,y+2);
+        ctx.lineTo(x+2,y+2);ctx.lineTo(x+3,y-2);ctx.lineTo(x+6,y-1);
+        ctx.lineTo(x+5,y+4);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#433f3b';ctx.fillRect(x-2,y+1,3,2);
+      }else{
+        ctx.fillStyle='#edddbd';ctx.beginPath();ctx.roundRect(x-5,y-3,10,8,1.5);ctx.fill();
+        ctx.strokeStyle='#9d7a55';ctx.lineWidth=1.1;ctx.stroke();
+        ctx.fillStyle='#a75742';ctx.beginPath();
+        ctx.moveTo(x-7,y-3);ctx.quadraticCurveTo(x,y-11,x+7,y-3);
+        ctx.lineTo(x+5,y-1);ctx.quadraticCurveTo(x,y-6,x-5,y-1);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#734f3f';ctx.fillRect(x-1.2,y+1,2.4,4);
+        ctx.fillStyle='#92c0c7';ctx.fillRect(x-4,y-2,2,2);
+        if(h.burning){
+          const wiggle=Math.sin(clock*9+h.x*2)*1.6;
+          ctx.fillStyle='rgba(75,72,66,.16)';ctx.beginPath();
+          ctx.arc(x+wiggle+2,y-12,4.4,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#fa7430';ctx.beginPath();
+          ctx.moveTo(x-5,y-4);ctx.quadraticCurveTo(x-6,y-9,x+wiggle,y-16);
+          ctx.quadraticCurveTo(x+5,y-9,x+5,y-4);ctx.fill();
+          ctx.fillStyle='#ffd777';ctx.beginPath();
+          ctx.moveTo(x-1.5,y-5);ctx.quadraticCurveTo(x-1,y-9,x,y-11);
+          ctx.quadraticCurveTo(x+3,y-7,x+1.5,y-5);ctx.fill();
+        }
+      }
+    }
+  }
   function createCity(x,y,kingdom=null,quiet=false){
     if(!isLand(x,y))return false;
     if(state.cities.some(c=>Math.hypot(c.x-x,c.y-y)<7))return false;
     const faction=kingdom??state.cities.reduce((m,c)=>Math.max(m,c.faction),-1)+1;
     const city={id:state.cities.reduce((m,c)=>Math.max(m,c.id),0)+1,x,y,faction,
       name:NAMES[faction%NAMES.length]+(kingdom===null?'':` · ${state.cities.length+1}`),pop:Math.floor(rand(12,27)),food:25,age:0};
-    state.cities.push(city);
+    state.cities.push(city);ensureHouses(city);
     for(let i=0;i<Math.min(12,city.pop);i++)spawnUnit(city);
     if(!quiet){toast(`Основано поселение ${city.name}`);setInfo(city.name,'Новое поселение основано. Жители будут собирать ресурсы, расти и исследовать соседние земли.');}
     return true;
@@ -308,7 +382,7 @@
       state.effects=state.effects.filter(e=>(e.life-=dt)>0);
       if(!state.paused)state.weatherTime+=dt;
       state.storms=state.storms.filter(storm=>state.weatherTime-storm.start<storm.duration);
-      if(!state.paused)elements.step(dt*state.speed,state.storms);
+      if(!state.paused)updateHouses(elements.step(dt*state.speed,state.storms));
     }
     if(terrainDirty&&timestamp-terrainRedrawAt>110){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
@@ -320,6 +394,7 @@
     for(const c of state.cities){
       const x=c.x*TILE+4,y=c.y*TILE+4;
       if(Math.abs(x-camera.x)>viewW/camera.z/2+100||Math.abs(y-camera.y)>viewH/camera.z/2+100)continue;
+      drawHouses(ctx,c,timestamp/1000);
       const radius=Math.min(18,8+c.pop/30);
       ctx.fillStyle=COLORS[c.faction%COLORS.length]+'29';ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
       ctx.strokeStyle=COLORS[c.faction%COLORS.length];ctx.lineWidth=1.3;ctx.stroke();
@@ -471,7 +546,7 @@
     canvas.style.cursor=tool==='look'?'grab':'crosshair';
   }
   function save(silent=false){
-    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes,elements:elements.serialize()};
+    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes,elements:elements.serialize(),volcanoes:elements.getVolcanoes().map(v=>({...v}))};
       localStorage.setItem(SAVE_KEY,JSON.stringify(data));if(!silent)toast('Мир сохранён на этом устройстве');return true;
     }catch(e){if(!silent)toast('Не удалось сохранить мир в браузере');return false;}
   }
@@ -481,7 +556,7 @@
       generate(data.seed);state.year=Math.max(1,data.year||1);
       state.changes=data.changes||{};
       for(const [key,val] of Object.entries(state.changes)){const n=Number(key);if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length)terrain[n]=val;}
-      drawTerrain();elements.restore(data.elements);state.cities=data.cities.slice(0,22);state.units=data.units.slice(0,600);state.ready=true;updateStats();
+      drawTerrain();elements.restore(data.elements);elements.restoreVolcanoes(data.volcanoes);state.cities=data.cities.slice(0,22);for(const c of state.cities)ensureHouses(c);state.units=data.units.slice(0,600);state.ready=true;updateStats();
       const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}syncCamera();return true;
     }catch(e){return false;}
   }
