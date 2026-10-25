@@ -101,19 +101,30 @@
         coloredTiles[i]=[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)];
       }else coloredTiles[i]=colors[terrain[i]];
     }
-    for(let py=0;py<height;py++)for(let px=0;px<width;px++){
-      const sx=(px+.5)/DETAIL_RES-.5,sy=(py+.5)/DETAIL_RES-.5;
-      const x0=Math.floor(sx),y0=Math.floor(sy);
-      const fx=smooth(sx-x0),fy=smooth(sy-y0);
-      const sample=(x,y)=>coloredTiles[at(clamp(x,0,W-1),clamp(y,0,H-1))];
-      const a=sample(x0,y0),b=sample(x0+1,y0),c=sample(x0,y0+1),e=sample(x0+1,y0+1);
-      const base=(py*width+px)*4;
-      const tint=(hash(px,py,state.seed+8)-.5)*9;
-      for(let k=0;k<3;k++){
-        const top=a[k]*(1-fx)+b[k]*fx,bot=c[k]*(1-fx)+e[k]*fx;
-        d[base+k]=clamp(top*(1-fy)+bot*fy+tint,0,255);
+    // Precompute interpolation coordinates; avoid a closure and four clamps
+    // for every texel (a substantial speed-up on mobile Safari).
+    const xs=new Uint16Array(width),xsNext=new Uint16Array(width);
+    const xMix=new Float32Array(width);
+    for(let px=0;px<width;px++){
+      const fx=(px+.5)/DETAIL_RES-.5,ix=Math.floor(fx);
+      xs[px]=clamp(ix,0,W-1);xsNext[px]=clamp(ix+1,0,W-1);
+      xMix[px]=smooth(fx-ix);
+    }
+    for(let py=0;py<height;py++){
+      const fy=(py+.5)/DETAIL_RES-.5,iy=Math.floor(fy);
+      const rowA=clamp(iy,0,H-1)*W,rowB=clamp(iy+1,0,H-1)*W;
+      const vy=smooth(fy-iy),invY=1-vy;
+      for(let px=0;px<width;px++){
+        const x=xs[px],xN=xsNext[px],vx=xMix[px],invX=1-vx;
+        const a=coloredTiles[rowA+x],b=coloredTiles[rowA+xN];
+        const c=coloredTiles[rowB+x],e=coloredTiles[rowB+xN];
+        const off=(py*width+px)*4;
+        const tint=(hash(px,py,state.seed+8)-.5)*9;
+        d[off]  =(a[0]*invX+b[0]*vx)*invY+(c[0]*invX+e[0]*vx)*vy+tint;
+        d[off+1]=(a[1]*invX+b[1]*vx)*invY+(c[1]*invX+e[1]*vx)*vy+tint;
+        d[off+2]=(a[2]*invX+b[2]*vx)*invY+(c[2]*invX+e[2]*vx)*vy+tint;
+        d[off+3]=255;
       }
-      d[base+3]=255;
     }
     lc.putImageData(img,0,0);
     tctx.clearRect(0,0,W*TILE,H*TILE);
