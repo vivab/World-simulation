@@ -14,9 +14,13 @@
   const tctx = worldCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
   const camera = {x:0,y:0,z:1};
+  // Rendered camera follows the target instead of snapping to touch input.
+  const targetCamera = {x:0,y:0,z:1};
+  const motion = {vx:0,vy:0};
+  const syncCamera = () => {camera.x=targetCamera.x;camera.y=targetCamera.y;camera.z=targetCamera.z;motion.vx=0;motion.vy=0;};
   const state = {seed:1,year:1,cities:[],units:[],effects:[],changes:{},tool:'look',speed:1,paused:false,ready:false,elapsed:0};
   let random = Math.random, viewW=0, viewH=0, last=0, statsAt=0, toastTimeout=0, moved=false;
-  const pointers = new Map(); let dragStart=null,pinchStart=null;
+  const pointers = new Map(); let dragStart=null,pinchStart=null,gestureMoved=false;
   const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
   const at = (x,y) => y*W+x;
   const rand = (a,b) => a+(b-a)*random();
@@ -107,7 +111,8 @@
     state.year=1;state.cities=[];state.units=[];state.effects=[];state.elapsed=0;
     generate(seed);
     for(let f=0;f<3;f++){const p=chooseLand(25);if(p)createCity(p.x,p.y,null,true);}
-    const first=state.cities[0];if(first){camera.x=first.x*TILE;camera.y=first.y*TILE;}
+    const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}
+    syncCamera();clampCamera(camera);clampCamera(targetCamera);
     state.ready=true;updateStats();toast('Рождён новый мир!');setInfo('Новая эпоха','Три молодых народа начинают свою историю. Используй инструменты внизу, чтобы менять их судьбу.');
   }
   function updateSim(){
@@ -160,22 +165,46 @@
     const left=(camera.x-viewW/(2*camera.z))/TILE,top=(camera.y-viewH/(2*camera.z))/TILE;
     miniCtx.strokeStyle='#fff7d9';miniCtx.lineWidth=1.4;miniCtx.strokeRect(left*sx,top*sy,viewW/(camera.z*TILE)*sx,viewH/(camera.z*TILE)*sy);
   }
-  function clampCamera(){
-    const halfW=viewW/(2*camera.z),halfH=viewH/(2*camera.z);
-    camera.x=halfW*2>W*TILE?W*TILE/2:clamp(camera.x,halfW,W*TILE-halfW);
-    camera.y=halfH*2>H*TILE?H*TILE/2:clamp(camera.y,halfH,H*TILE-halfH);
+  function clampCamera(view=camera){
+    const halfW=viewW/(2*view.z),halfH=viewH/(2*view.z);
+    view.x=halfW*2>W*TILE?W*TILE/2:clamp(view.x,halfW,W*TILE-halfW);
+    view.y=halfH*2>H*TILE?H*TILE/2:clamp(view.y,halfH,H*TILE-halfH);
+  }
+  function updateCamera(dt){
+    // Inertial glide slows exponentially; user input interrupts it immediately.
+    const friction=Math.exp(-dt*5.8);
+    if(pointers.size===0){
+      targetCamera.x+=motion.vx*dt;
+      targetCamera.y+=motion.vy*dt;
+      motion.vx*=friction;motion.vy*=friction;
+      if(Math.abs(motion.vx)<1)motion.vx=0;
+      if(Math.abs(motion.vy)<1)motion.vy=0;
+    }
+    clampCamera(targetCamera);
+    if(targetCamera.x<=viewW/(2*targetCamera.z)||targetCamera.x>=W*TILE-viewW/(2*targetCamera.z))motion.vx=0;
+    if(targetCamera.y<=viewH/(2*targetCamera.z)||targetCamera.y>=H*TILE-viewH/(2*targetCamera.z))motion.vy=0;
+    const follow=1-Math.exp(-dt*(pointers.size?22:13));
+    const zoomFollow=1-Math.exp(-dt*16);
+    camera.x+=(targetCamera.x-camera.x)*follow;
+    camera.y+=(targetCamera.y-camera.y)*follow;
+    camera.z+=(targetCamera.z-camera.z)*zoomFollow;
+    clampCamera(camera);
   }
   function resize(){
     const rect=canvas.getBoundingClientRect();viewW=rect.width;viewH=rect.height;
     const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(viewW*dpr);canvas.height=Math.round(viewH*dpr);
-    camera.z=camera.z||1;ctx.imageSmoothingEnabled=false;clampCamera();
+    camera.z=camera.z||1;ctx.imageSmoothingEnabled=false;clampCamera();clampCamera(targetCamera);
   }
-  function screenToWorld(sx,sy){return {x:(sx-viewW/2)/camera.z+camera.x,y:(sy-viewH/2)/camera.z+camera.y};}
-  function zoomAt(sx,sy,factor){const before=screenToWorld(sx,sy);const minZ=Math.max(.22,Math.min(viewW/(W*TILE),viewH/(H*TILE))*.9);
-    camera.z=clamp(camera.z*factor,minZ,3.6);
-    camera.x=before.x-(sx-viewW/2)/camera.z;camera.y=before.y-(sy-viewH/2)/camera.z;clampCamera();}
+  function screenToWorld(sx,sy,view=camera){return {x:(sx-viewW/2)/view.z+view.x,y:(sy-viewH/2)/view.z+view.y};}
+  function zoomAt(sx,sy,factor){const before=screenToWorld(sx,sy,targetCamera);
+    const minZ=Math.max(.22,Math.min(viewW/(W*TILE),viewH/(H*TILE))*.9);
+    targetCamera.z=clamp(targetCamera.z*factor,minZ,3.6);
+    targetCamera.x=before.x-(sx-viewW/2)/targetCamera.z;
+    targetCamera.y=before.y-(sy-viewH/2)/targetCamera.z;clampCamera(targetCamera);
+  }
   function draw(timestamp){
     const dt=Math.min(.05,(timestamp-last)/1000||.016);last=timestamp;
+    updateCamera(dt);
     if(state.ready){
       if(!state.paused){state.elapsed+=dt*state.speed;while(state.elapsed>=2){state.elapsed-=2;updateSim();}updateUnits(dt*state.speed);}
       state.effects=state.effects.filter(e=>(e.life-=dt)>0);
@@ -262,34 +291,81 @@
       state.changes=data.changes||{};
       for(const [key,val] of Object.entries(state.changes)){const n=Number(key);if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length)terrain[n]=val;}
       drawTerrain();state.cities=data.cities.slice(0,22);state.units=data.units.slice(0,600);state.ready=true;updateStats();
-      const first=state.cities[0];if(first){camera.x=first.x*TILE;camera.y=first.y*TILE;}return true;
+      const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}syncCamera();return true;
     }catch(e){return false;}
   }
   function bindInput(){
+    const point=e=>{const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top,t:performance.now()};};
+    const startPinch=()=>{
+      const [a,b]=[...pointers.values()];
+      const x=(a.x+b.x)/2,y=(a.y+b.y)/2;
+      pinchStart={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),
+        zoom:targetCamera.z,anchor:screenToWorld(x,y,targetCamera)};
+      dragStart=null;gestureMoved=true;motion.vx=motion.vy=0;
+    };
     canvas.addEventListener('pointerdown',e=>{
-      canvas.setPointerCapture(e.pointerId);const rect=canvas.getBoundingClientRect();
-      pointers.set(e.pointerId,{x:e.clientX-rect.left,y:e.clientY-rect.top});moved=false;
-      if(pointers.size===1){dragStart={x:e.clientX-rect.left,y:e.clientY-rect.top,cx:camera.x,cy:camera.y};pinchStart=null;}
-      if(pointers.size===2){const [a,b]=Array.from(pointers.values());pinchStart={distance:Math.hypot(a.x-b.x,a.y-b.y),zoom:camera.z};dragStart=null;moved=true;}
+      e.preventDefault();canvas.setPointerCapture(e.pointerId);
+      const p=point(e),previous=pointers.size;pointers.set(e.pointerId,p);
+      motion.vx=motion.vy=0;
+      if(previous===0){gestureMoved=false;dragStart={x:p.x,y:p.y,cx:targetCamera.x,cy:targetCamera.y,prev:p,vx:0,vy:0};pinchStart=null;}
+      if(pointers.size===2)startPinch();
+      if(pointers.size>2){dragStart=null;gestureMoved=true;}
     });
     canvas.addEventListener('pointermove',e=>{
-      if(!pointers.has(e.pointerId))return;const rect=canvas.getBoundingClientRect();
-      pointers.set(e.pointerId,{x:e.clientX-rect.left,y:e.clientY-rect.top});
-      if(pointers.size===2&&pinchStart){const [a,b]=Array.from(pointers.values());const dist=Math.hypot(a.x-b.x,a.y-b.y);
-        const mx=(a.x+b.x)/2,my=(a.y+b.y)/2;zoomAt(mx,my,(pinchStart.zoom*dist/Math.max(1,pinchStart.distance))/camera.z);moved=true;
-      }else if(pointers.size===1&&dragStart){const p=Array.from(pointers.values())[0];const dx=p.x-dragStart.x,dy=p.y-dragStart.y;
-        if(Math.hypot(dx,dy)>6)moved=true;
-        camera.x=dragStart.cx-dx/camera.z;camera.y=dragStart.cy-dy/camera.z;clampCamera();
+      if(!pointers.has(e.pointerId))return;
+      const p=point(e);pointers.set(e.pointerId,p);
+      if(pointers.size===2){
+        if(!pinchStart)startPinch();
+        const [a,b]=[...pointers.values()];
+        const distance=Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));
+        const midX=(a.x+b.x)/2,midY=(a.y+b.y)/2;
+        const minZ=Math.max(.22,Math.min(viewW/(W*TILE),viewH/(H*TILE))*.9);
+        targetCamera.z=clamp(pinchStart.zoom*distance/pinchStart.distance,minZ,3.6);
+        targetCamera.x=pinchStart.anchor.x-(midX-viewW/2)/targetCamera.z;
+        targetCamera.y=pinchStart.anchor.y-(midY-viewH/2)/targetCamera.z;
+        clampCamera(targetCamera);gestureMoved=true;
+      }else if(pointers.size===1&&dragStart){
+        const dx=p.x-dragStart.x,dy=p.y-dragStart.y;
+        if(Math.hypot(dx,dy)>6)gestureMoved=true;
+        targetCamera.x=dragStart.cx-dx/targetCamera.z;
+        targetCamera.y=dragStart.cy-dy/targetCamera.z;
+        clampCamera(targetCamera);
+        const elapsed=Math.max(.008,(p.t-dragStart.prev.t)/1000);
+        const ivx=clamp(-(p.x-dragStart.prev.x)/targetCamera.z/elapsed,-1600,1600);
+        const ivy=clamp(-(p.y-dragStart.prev.y)/targetCamera.z/elapsed,-1600,1600);
+        dragStart.vx=dragStart.vx*.35+ivx*.65;
+        dragStart.vy=dragStart.vy*.35+ivy*.65;
+        dragStart.prev=p;
       }
     });
-    function release(e){if(!pointers.has(e.pointerId))return;
-      const rect=canvas.getBoundingClientRect();const x=e.clientX-rect.left,y=e.clientY-rect.top;
-      if(pointers.size===1&&!moved)action(x,y);
-      pointers.delete(e.pointerId);dragStart=null;pinchStart=null;
+    function release(e){
+      if(!pointers.has(e.pointerId))return;
+      const p=point(e),wasLast=pointers.size===1;
+      if(wasLast&&!gestureMoved&&e.type==='pointerup')action(p.x,p.y);
+      if(wasLast&&gestureMoved&&dragStart&&e.type==='pointerup'){
+        const age=performance.now()-dragStart.prev.t;
+        if(age<85){motion.vx=dragStart.vx*.65;motion.vy=dragStart.vy*.65;}
+      }
+      pointers.delete(e.pointerId);
+      if(pointers.size===1){
+        const remaining=[...pointers.values()][0];
+        dragStart={x:remaining.x,y:remaining.y,cx:targetCamera.x,cy:targetCamera.y,prev:remaining,vx:0,vy:0};
+        pinchStart=null;gestureMoved=true;
+      }else if(pointers.size===0){dragStart=null;pinchStart=null;}
     }
-    canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',e=>{pointers.delete(e.pointerId);dragStart=null;pinchStart=null;});
-    canvas.addEventListener('wheel',e=>{e.preventDefault();const rect=canvas.getBoundingClientRect();zoomAt(e.clientX-rect.left,e.clientY-rect.top,e.deltaY<0?1.13:.88);},{passive:false});
-    minimap.addEventListener('click',e=>{const r=minimap.getBoundingClientRect();camera.x=(e.clientX-r.left)/r.width*W*TILE;camera.y=(e.clientY-r.top)/r.height*H*TILE;clampCamera();});
+    canvas.addEventListener('pointerup',release);
+    canvas.addEventListener('pointercancel',release);
+    canvas.addEventListener('lostpointercapture',release);
+    canvas.addEventListener('wheel',e=>{
+      e.preventDefault();const r=canvas.getBoundingClientRect();
+      zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-clamp(e.deltaY,-160,160)*.0014));
+    },{passive:false});
+    minimap.addEventListener('click',e=>{
+      const r=minimap.getBoundingClientRect();
+      targetCamera.x=(e.clientX-r.left)/r.width*W*TILE;
+      targetCamera.y=(e.clientY-r.top)/r.height*H*TILE;
+      motion.vx=motion.vy=0;clampCamera(targetCamera);
+    });
     document.querySelectorAll('.tool').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
     document.querySelectorAll('.speed').forEach(b=>b.addEventListener('click',()=>{
       state.speed=Number(b.dataset.speed);state.paused=false;$('pause').textContent='Ⅱ';
@@ -303,7 +379,7 @@
     window.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();$('pause').click();}else if(e.key.toLowerCase()==='s')save();});
   }
   // Bootstrap: no network requests, external scripts or build steps.
-  resize();camera.z=Math.max(.23,Math.min(viewW/(W*TILE),viewH/(H*TILE))*1.85);
-  camera.x=W*TILE/2;camera.y=H*TILE/2;
-  bindInput();if(!restore())startNew();clampCamera();updateStats();requestAnimationFrame(draw);
+  resize();targetCamera.z=Math.max(.23,Math.min(viewW/(W*TILE),viewH/(H*TILE))*1.85);
+  targetCamera.x=W*TILE/2;targetCamera.y=H*TILE/2;syncCamera();
+  bindInput();if(!restore())startNew();clampCamera();clampCamera(targetCamera);updateStats();requestAnimationFrame(draw);
 })();
