@@ -39,10 +39,25 @@
       }
       return true;
     }
+    function clearArea(cx,cy,radius=2){
+      // Repainting is real terraforming, not a decal laid above lava/fire.
+      for(let y=Math.max(0,cy-radius);y<=Math.min(H-1,cy+radius);y++)
+        for(let x=Math.max(0,cx-radius);x<=Math.min(W-1,cx+radius);x++){
+          if((x-cx)**2+(y-cy)**2>radius*radius)continue;
+          const i=index(x,y);
+          if(cells[i]){cells[i]=0;power[i]=0;next[i]=0;nextPower[i]=0;dirty=true;}
+        }
+      for(let k=volcanoes.length-1;k>=0;k--){
+        if(Math.hypot(volcanoes[k].x-cx,volcanoes[k].y-cy)<=radius){
+          volcanoes.splice(k,1);
+        }
+      }
+    }
     function paint(x,y,kind,radius=2){
       x=Math.floor(x);y=Math.floor(y);
       if(kind==='volcano'){addVolcano(x,y);return;}
       const type={ground:10,sand:7,rock:5,mountain:6}[kind];
+      if(type!==undefined)clearArea(x,y,radius);
       for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++){
         if(dx*dx+dy*dy>(radius+.25)*(radius+.25))continue;
         const nx=x+dx,ny=y+dy;if(!inside(nx,ny))continue;
@@ -204,7 +219,7 @@
         ctx.moveTo(px-1.4,py+1);ctx.quadraticCurveTo(px-1,py-2,px,py-4);ctx.quadraticCurveTo(px+3,py-1,px+1.3,py+1);ctx.fill();
       }
     }
-    return {paint,step,draw,drawFlames,reset,serialize,restore,restoreVolcanoes,
+    return {paint,clearArea,step,draw,drawFlames,reset,serialize,restore,restoreVolcanoes,
       getVolcanoes:()=>volcanoes,getType:(x,y)=>inside(x,y)?cells[index(x,y)]:0,extinguish,
       ignite:(x,y)=>place(x,y,FIRE,7),getCount:()=>cells.reduce((a,b)=>a+(b!==0),0)};
   };
