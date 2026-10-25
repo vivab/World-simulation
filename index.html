@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#121a20" />
+  <meta name="description" content="WorldSimulation — живая песочница цивилизаций прямо в браузере." />
+  <title>WorldSimulation — Рождение мира</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main id="game" aria-label="Симулятор живого мира">
+    <canvas id="world" aria-label="Игровая карта"></canvas>
+    <div class="shade"></div>
+    <header class="header">
+      <div class="brand">
+        <span class="brand-mark">✺</span>
+        <span><strong>WORLD<span class="brand-em">SIM</span></strong><small>THE LIVING WORLD <span class="version">ALPHA 0.1</span></small></span>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" id="newWorld" title="Создать новый мир" aria-label="Создать новый мир">↻ <span>Новый мир</span></button>
+        <button class="header-btn" id="saveWorld" title="Сохранить мир" aria-label="Сохранить мир">▣ <span>Сохранить</span></button>
+      </div>
+    </header>
+    <section class="stats" aria-label="Статистика мира">
+      <div><small>ГОД</small><strong id="year">1</strong></div>
+      <i></i>
+      <div><small>НАСЕЛЕНИЕ</small><strong id="population">0</strong></div>
+      <i></i>
+      <div><small>КОРОЛЕВСТВА</small><strong id="kingdoms">0</strong></div>
+    </section>
+    <section class="controls" aria-label="Управление временем">
+      <button id="pause" aria-label="Пауза" title="Пауза">Ⅱ</button>
+      <button class="speed active" data-speed="1">1×</button>
+      <button class="speed" data-speed="2">2×</button>
+      <button class="speed" data-speed="4">4×</button>
+    </section>
+    <aside class="info" id="info" aria-live="polite">
+      <div class="info-cap">СИМУЛЯЦИЯ ЗАПУЩЕНА <span class="pulse"></span></div>
+      <strong id="infoTitle">Новая эпоха</strong>
+      <p id="infoText">Мир начинает свою историю. Создавай поселения и наблюдай, как растут цивилизации.</p>
+    </aside>
+    <div class="map-wrap" aria-label="Миникарта"><canvas id="minimap" width="200" height="128"></canvas><span>КАРТА МИРА</span></div>
+    <div class="hint" id="hint">Перемещай карту пальцем · Раздвигай пальцы для приближения</div>
+    <section class="toolbar-area" aria-label="Инструменты бога">
+      <div class="tool-label"><span>✦ СИЛЫ СОЗДАТЕЛЯ</span><span id="toolDescription">Исследовать мир</span></div>
+      <nav class="toolbar" id="toolbar">
+        <button class="tool active" data-tool="look"><span class="tool-icon">✥</span><span>Обзор</span></button>
+        <button class="tool" data-tool="village"><span class="tool-icon">♜</span><span>Поселение</span></button>
+        <button class="tool" data-tool="forest"><span class="tool-icon">♣</span><span>Лес</span></button>
+        <button class="tool" data-tool="rain"><span class="tool-icon">☂</span><span>Дождь</span></button>
+        <button class="tool" data-tool="meteor"><span class="tool-icon">☄</span><span>Метеорит</span></button>
+        <button class="tool" data-tool="inspect"><span class="tool-icon">⌕</span><span>Инфо</span></button>
+      </nav>
+    </section>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script defer src="./src/app.js"></script>
+</body>
+</html>
