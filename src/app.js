@@ -384,7 +384,7 @@
       state.storms=state.storms.filter(storm=>state.weatherTime-storm.start<storm.duration);
       if(!state.paused)updateHouses(elements.step(dt*state.speed,state.storms));
     }
-    if(terrainDirty&&timestamp-terrainRedrawAt>110){drawTerrain();terrainRedrawAt=timestamp;}
+    if(terrainDirty&&timestamp-terrainRedrawAt>180){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
@@ -540,7 +540,7 @@
       mountain:'Заснеженные горы',water:'Вода растекается и тушит огонь',
       rain:'Можно создавать сколько угодно дождей',fire:'Огонь распространяется по растениям',
       acid:'Кислота разрушает камни и растения',lava:'Горячая лава течёт и остывает',
-      volcano:'Создать вулкан и лаву',meteor:'Падение метеорита',
+      volcano:'Нажми один раз: маленький вулкан будет извергать лаву',meteor:'Падение метеорита',
       village:'Коснись суши для основания'};
     $('toolDescription').textContent=labels[tool]||tool;
     canvas.style.cursor=tool==='look'?'grab':'crosshair';
