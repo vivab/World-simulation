@@ -76,11 +76,8 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   function terrainUpdated(i){
     if(!Number.isInteger(i)||i<0||i>=terrain.length)return;
     const t=terrain[i],b=biome[i];
-    // Desert and winter never become grassy or bare brown earth from watering.
-    if(t===SOIL&&(b===1||b===3)){
-      terrain[i]=b===1?SAND:SNOW;
-      onTerrainChange(i);return;
-    }
+    // A landscape brush ALWAYS wins over the climate: users can put brown
+    // soil, sand or rocks anywhere. Climate only controls natural growth.
     if((t!==GRASS&&!(b===1&&t===SAND)&&!(b===3&&t===SNOW))||t===ASH)clearPlant(i);
   }
   function waterAt(cx,cy,radius=2,amount=38,animate=true){
@@ -98,18 +95,18 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     const b=B[kind];if(b===undefined)return;
     for(let y=cy-radius;y<=cy+radius;y++)for(let x=cx-radius;x<=cx+radius;x++){
       if(!valid(x,y)||(x-cx)**2+(y-cy)**2>radius*radius)continue;
-      const i=I(x,y);biome[i]=b;overrides.set(i,b);
-      const t=terrain[i];
-      if(t<2||t===5||t===8)continue;
-      if(b===1&&[GRASS,SOIL,4,SNOW].includes(t)){terrain[i]=SAND;onTerrainChange(i);}
-      else if(b===3&&[GRASS,SOIL,4,SAND].includes(t)){terrain[i]=SNOW;onTerrainChange(i);}
-      else if((t===SAND||t===SNOW)&&[0,2,4,5].includes(b)){
-        terrain[i]=SOIL;onTerrainChange(i);
-      }
+      const i=I(x,y),before=terrain[i],oldBiome=biome[i];
+      biome[i]=b;overrides.set(i,b);
+      // Painting a climate is also a terrain brush: it reclaims ANY tile,
+      // including the middle of an ocean, a river or the top of a mountain.
+      // Existing grass may stay where it is appropriate for the new biome.
+      const target=b===1?SAND:b===3?SNOW:
+        before===GRASS&&oldBiome!==1&&oldBiome!==3?GRASS:SOIL;
+      if(before!==target){terrain[i]=target;onTerrainChange(i);}
+      else terrainUpdated(i);
       if(b===4)moisture[i]=Math.max(moisture[i],70);
       else if(b===5)moisture[i]=Math.max(moisture[i],88);
       else if(b===1)moisture[i]=Math.min(moisture[i],22);
-      terrainUpdated(i);
       if(growth[i])species[i]=assignSpecies(i);
     }
   }
