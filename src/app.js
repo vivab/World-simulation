@@ -14,7 +14,7 @@
   const tctx = worldCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
   let terrainDirty=false,terrainRedrawAt=0;
-  const elements=window.createWorldElements({width:W,height:H,tile:T,terrain,altitude,
+  const elements=window.createWorldElements({width:W,height:H,tile:TILE,terrain,altitude,
     onTerrainChange:(index)=>{terrainDirty=true;if(Number.isInteger(index))state.changes[index]=terrain[index];}});
   const PAINT_TOOLS=new Set(['ground','forest','sand','rock','mountain','water','fire','acid','lava','rain','meteor','volcano']);
   let activeCategory='world',lastBrushCell='',lastRainSpot=null;
