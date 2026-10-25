@@ -1,11 +1,11 @@
-/* WorldSimulation alpha 0.3 — mobile-friendly world physics sandbox. */
+/* WorldSimulation alpha 0.4 — smooth illustrated landscape and living nature. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
   const COLORS = ['#e9b56e', '#ca98e2', '#89d4c9', '#e47e83', '#bed678'];
   const NAMES = ['Аурелия', 'Нордхейм', 'Валория', 'Элирия', 'Равенхольд', 'Соларис', 'Аркания', 'Эстерия'];
-  const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река'];
-  const PALETTE = ['#225a83', '#498bb6', '#f3d78d', '#92c77b', '#52a46c', '#999ba0', '#d9dee1', '#ebbb72', '#6eb8db'];
+  const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река', 'Пепелище'];
+  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c'];
   const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d', {alpha:false});
   const minimap = document.querySelector('#minimap'), miniCtx = minimap.getContext('2d');
   const $ = id => document.getElementById(id);
@@ -16,7 +16,7 @@
   let terrainDirty=false,terrainRedrawAt=0;
   const elements=window.createWorldElements({width:W,height:H,tile:TILE,terrain,altitude,
     onTerrainChange:(index)=>{terrainDirty=true;if(Number.isInteger(index))state.changes[index]=terrain[index];}});
-  const PAINT_TOOLS=new Set(['ground','forest','sand','rock','mountain','water','fire','acid','lava','rain','meteor','volcano']);
+  const PAINT_TOOLS=new Set(['ground','forest','sand','rock','mountain','water','fire','acid','lava','rain','meteor']);
   let activeCategory='world',lastBrushCell='',lastRainSpot=null;
   const camera = {x:0,y:0,z:1};
   // Rendered camera follows the target instead of snapping to touch input.
@@ -68,25 +68,67 @@
     }
     elements.reset();drawTerrain();
   }
-  function drawTerrain() {
-    const img=tctx.createImageData(W*TILE,H*TILE), d=img.data;
-    // Build the terrain texture once. Runtime draws a single cached bitmap.
-    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      const type=terrain[at(x,y)],color=PALETTE[type];
-      const base=[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)];
-      const tint=(hash(x,y,state.seed+8)-.5)*23;
-      for(let py=0;py<TILE;py++)for(let px=0;px<TILE;px++){
-        const idx=((y*TILE+py)*(W*TILE)+(x*TILE+px))*4;
-        const variation=hash(x*TILE+px,y*TILE+py,state.seed+9);
-        let shade=tint+(variation>.94?13:variation<.06?-12:0);
-        if((type===0||type===1)&&(px===0||py===0))shade+=4;
-        if(type===4&&px>=2&&px<=5&&py>=1&&py<=4)shade-=11;
-        if(type===5&&px>=Math.abs(py-4)+1&&px<=7-Math.abs(py-4))shade+=19;
-        if(type===6&&px>1&&px<6&&py<4)shade+=17;
-        d[idx]=clamp(base[0]+shade,0,255);d[idx+1]=clamp(base[1]+shade,0,255);d[idx+2]=clamp(base[2]+shade,0,255);d[idx+3]=255;
+  function drawTerrain(){
+    // Small blended texture -> full sized cached illustration; no hard pixels.
+    const width=W*2,height=H*2;
+    const low=document.createElement('canvas');low.width=width;low.height=height;
+    const lc=low.getContext('2d');
+    const img=lc.createImageData(width,height),d=img.data;
+    const colors=PALETTE.map(c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]);
+    for(let py=0;py<height;py++)for(let px=0;px<width;px++){
+      const sx=(px+.5)/2-.5,sy=(py+.5)/2-.5;
+      const x0=Math.floor(sx),y0=Math.floor(sy);
+      const fx=smooth(sx-x0),fy=smooth(sy-y0);
+      const sample=(x,y)=>colors[terrain[at(clamp(x,0,W-1),clamp(y,0,H-1))]];
+      const a=sample(x0,y0),b=sample(x0+1,y0),c=sample(x0,y0+1),e=sample(x0+1,y0+1);
+      const base=(py*width+px)*4;
+      const tint=(hash(px,py,state.seed+8)-.5)*9;
+      for(let k=0;k<3;k++){
+        const top=a[k]*(1-fx)+b[k]*fx,bot=c[k]*(1-fx)+e[k]*fx;
+        d[base+k]=clamp(top*(1-fy)+bot*fy+tint,0,255);
+      }
+      d[base+3]=255;
+    }
+    lc.putImageData(img,0,0);
+    tctx.clearRect(0,0,W*TILE,H*TILE);
+    tctx.imageSmoothingEnabled=true;
+    tctx.drawImage(low,0,0,W*TILE,H*TILE);
+    // Illustrated forest crowns, shaded rounded boulders, grasses and shore foam.
+    for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+      const type=terrain[at(x,y)],px=x*TILE+4,py=y*TILE+4;
+      const sample=hash(x,y,state.seed+19);
+      if(type===4&&sample>.48){
+        const size=4.2+hash(x,y,state.seed+23)*2.5;
+        tctx.fillStyle='rgba(37,82,53,.24)';
+        tctx.beginPath();tctx.ellipse(px+1.4,py+2.8,size*1.05,size*.56,-.3,0,Math.PI*2);tctx.fill();
+        tctx.strokeStyle='#927555';tctx.lineWidth=1.7;
+        tctx.beginPath();tctx.moveTo(px,py+3);tctx.lineTo(px,py-1);tctx.stroke();
+        tctx.fillStyle='#338856';tctx.beginPath();tctx.arc(px-1.8,py-.7,size*.68,0,Math.PI*2);tctx.fill();
+        tctx.fillStyle='#51ac64';tctx.beginPath();tctx.arc(px+1.6,py-2.2,size*.79,0,Math.PI*2);tctx.fill();
+        tctx.fillStyle='#8bce78';tctx.beginPath();tctx.arc(px-.5,py-3.6,size*.47,0,Math.PI*2);tctx.fill();
+      }else if((type===3||type===7)&&sample>.88){
+        tctx.strokeStyle=type===3?'rgba(63,136,67,.45)':'rgba(152,116,63,.28)';
+        tctx.lineWidth=.85;tctx.lineCap='round';tctx.beginPath();
+        tctx.moveTo(px-2,py+2);tctx.quadraticCurveTo(px-2.5,py-1,px-4,py-2.6);
+        tctx.moveTo(px-2,py+2);tctx.quadraticCurveTo(px,py-1,px+.6,py-3);
+        tctx.moveTo(px-2,py+2);tctx.lineTo(px+2,py);tctx.stroke();
+      }else if((type===5||type===6)&&sample>.77){
+        tctx.fillStyle='rgba(63,74,77,.16)';tctx.beginPath();
+        tctx.ellipse(px,py+2,5,2.3,0,0,Math.PI*2);tctx.fill();
+        tctx.fillStyle=type===6?'#f2f7f3':'#c8c9c0';
+        tctx.beginPath();tctx.moveTo(px-4,py+1);tctx.quadraticCurveTo(px-2,py-4,px,py-4);
+        tctx.quadraticCurveTo(px+3,py-2,px+5,py+1);tctx.closePath();tctx.fill();
+        tctx.strokeStyle='#8a948f';tctx.lineWidth=.8;tctx.stroke();
+      }else if(type===9&&sample>.68){
+        tctx.strokeStyle='rgba(35,36,37,.28)';tctx.lineWidth=1.1;
+        tctx.beginPath();tctx.moveTo(px-2,py-2);tctx.lineTo(px+1,py+2);tctx.stroke();
+      }
+      if((type===1||type===8)&&sample>.67){
+        tctx.strokeStyle='rgba(206,250,255,.21)';tctx.lineWidth=1.2;tctx.lineCap='round';
+        tctx.beginPath();tctx.moveTo(px-3,py);tctx.quadraticCurveTo(px,py-2,px+3,py);tctx.stroke();
       }
     }
-    tctx.putImageData(img,0,0);drawMinimap();terrainDirty=false;
+    drawMinimap();terrainDirty=false;
   }
   function chooseLand(minDistance=0,near=null) {
     for(let attempts=0;attempts<1800;attempts++){
@@ -198,7 +240,7 @@
   function resize(){
     const rect=canvas.getBoundingClientRect();viewW=rect.width;viewH=rect.height;
     const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(viewW*dpr);canvas.height=Math.round(viewH*dpr);
-    camera.z=camera.z||1;ctx.imageSmoothingEnabled=false;clampCamera();clampCamera(targetCamera);
+    camera.z=camera.z||1;ctx.imageSmoothingEnabled=true;clampCamera();clampCamera(targetCamera);
   }
   function screenToWorld(sx,sy,view=camera){return {x:(sx-viewW/2)/view.z+view.x,y:(sy-viewH/2)/view.z+view.y};}
   function zoomAt(sx,sy,factor){const before=screenToWorld(sx,sy,targetCamera);
@@ -221,7 +263,8 @@
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
-    ctx.imageSmoothingEnabled=false;ctx.drawImage(worldCanvas,0,0);
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(worldCanvas,0,0);
+    drawVolcanoes(ctx,timestamp/1000);
     elements.draw(ctx);
     for(const c of state.cities){
       const x=c.x*TILE+4,y=c.y*TILE+4;
@@ -232,6 +275,7 @@
       ctx.fillStyle='#27333a';ctx.fillRect(x-6,y-7,12,12);ctx.fillStyle='#b4c9b8';ctx.fillRect(x-5,y-7,10,6);
       ctx.fillStyle=COLORS[c.faction%COLORS.length];ctx.fillRect(x-2,y-12,4,5);ctx.fillStyle='#28292b';ctx.fillRect(x-1,y+1,3,4);
     }
+    elements.drawFlames(ctx,camera,viewW,viewH,timestamp/1000);
     if(camera.z>.36){for(const u of state.units){const city=state.cities.find(c=>c.id===u.city);if(!city)continue;
       ctx.fillStyle=COLORS[city.faction%COLORS.length];ctx.fillRect(u.x*TILE+2,u.y*TILE+2,3,3);}}
     for(const e of state.effects){const r=(1-e.life/e.max)*e.radius*TILE;
@@ -339,6 +383,7 @@
     const p=screenToWorld(sx,sy),x=Math.floor(p.x/TILE),y=Math.floor(p.y/TILE);
     if(x<0||y<0||x>=W||y>=H)return;
     const tool=state.tool,terrainType=terrain[at(x,y)];
+    if(tool==='volcano'){modifyTerrain(x,y,tool);return;}
     if(PAINT_TOOLS.has(tool)){paintBrush(sx,sy);return;}
     if(tool==='village'){
       if(!isLand(x,y)){toast('Поселение можно поставить только на суше');return;}
