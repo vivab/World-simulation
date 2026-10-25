@@ -130,6 +130,57 @@
     }
     drawMinimap();terrainDirty=false;
   }
+
+  // Small illustrated volcanoes with persistent glowing craters.
+  function drawVolcanoes(ctx,clock){
+    for(const volcano of elements.getVolcanoes()){
+      const x=(volcano.x+.5)*TILE,y=(volcano.y+.5)*TILE;
+      if(Math.abs(x-camera.x)>viewW/(2*camera.z)+80||Math.abs(y-camera.y)>viewH/(2*camera.z)+80)continue;
+      ctx.save();
+      ctx.fillStyle='rgba(51,47,49,.20)';
+      ctx.beginPath();ctx.ellipse(x+2,y+14,34,17,-.08,0,Math.PI*2);ctx.fill();
+      // Dark rocky sides, rounded shoulders and a raised rim.
+      ctx.fillStyle='#5e6671';ctx.beginPath();
+      ctx.moveTo(x-29,y+12);
+      ctx.bezierCurveTo(x-25,y+2,x-16,y-4,x-12,y-13);
+      ctx.quadraticCurveTo(x-5,y-24,x+2,y-20);
+      ctx.quadraticCurveTo(x+11,y-22,x+16,y-12);
+      ctx.bezierCurveTo(x+20,y-4,x+30,y+4,x+31,y+12);
+      ctx.quadraticCurveTo(x,y+26,x-29,y+12);ctx.fill();
+      ctx.fillStyle='#a59383';ctx.beginPath();
+      ctx.moveTo(x-29,y+12);
+      ctx.quadraticCurveTo(x-14,y-6,x-11,y-15);
+      ctx.quadraticCurveTo(x-5,y-22,x,y-19);
+      ctx.quadraticCurveTo(x-4,y-2,x-8,y+6);
+      ctx.quadraticCurveTo(x-17,y+14,x-29,y+12);ctx.fill();
+      ctx.fillStyle='#757680';ctx.beginPath();
+      ctx.moveTo(x+4,y-19);ctx.quadraticCurveTo(x+14,y-15,x+18,y-2);
+      ctx.quadraticCurveTo(x+23,y+6,x+31,y+12);
+      ctx.quadraticCurveTo(x+16,y+17,x+10,y+18);
+      ctx.quadraticCurveTo(x+17,y+5,x+10,y-7);ctx.fill();
+      // Animated lava stream down the side.
+      const pulse=.5+.5*Math.sin(clock*4+volcano.phase);
+      ctx.strokeStyle='#a33323';ctx.lineWidth=6;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(x+3,y-15);ctx.bezierCurveTo(x+6,y-6,x+2,y+4,x+11,y+11);ctx.stroke();
+      ctx.strokeStyle=pulse>.4?'#ffb746':'#ff7d32';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(x+3,y-15);ctx.bezierCurveTo(x+6,y-6,x+2,y+4,x+11,y+11);ctx.stroke();
+      ctx.fillStyle='#48494f';ctx.beginPath();
+      ctx.ellipse(x,y-18,13,7,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#ff713a';ctx.beginPath();
+      ctx.ellipse(x,y-18,9.8,4.8,0,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#ffe27b';ctx.beginPath();
+      ctx.ellipse(x+Math.sin(clock*3+volcano.phase)*1.6,y-18,5+2*pulse,2.6,0,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#cbc2b0';ctx.lineWidth=1.8;ctx.beginPath();
+      ctx.ellipse(x,y-18,12.7,6.8,0,Math.PI*.96,Math.PI*2);ctx.stroke();
+      // Soft smoke puffs drift over the vent.
+      for(let k=0;k<3;k++){
+        const t=(clock*.28+k/3+volcano.phase*.15)%1;
+        ctx.fillStyle='rgba(96,94,103,'+(0.24*(1-t)).toFixed(3)+')';
+        ctx.beginPath();ctx.arc(x+Math.sin(k*3+clock)*5+t*11,y-27-t*31,4+t*6,0,Math.PI*2);ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
   function chooseLand(minDistance=0,near=null) {
     for(let attempts=0;attempts<1800;attempts++){
       let x=near?Math.round(near.x+rand(-30,30)):Math.floor(rand(10,W-10));
