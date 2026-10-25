@@ -87,7 +87,7 @@ button:active{transform:scale(.96)}
 }
 
 /* WorldSimulation 0.4: smooth illustrated map, retain crisp readable controls. */
-#world{image-rendering:auto;filter:saturate(.96) contrast(1.015)}
+#world{image-rendering:auto;filter:saturate(.88) contrast(1.09)}
 .map-wrap canvas{image-rendering:auto}
 #game{background:#4d9cc2}
 .tool-tab,.tool,.header-btn,.controls button{border-radius:14px}
