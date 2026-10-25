@@ -296,7 +296,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   function getBiomeColor(type,x,y){
     const b=getBiome(x,y);
     if(type===GRASS)return ['#80ab72','#c5b277','#baaa63','#e1e9dd','#589565','#718b74'][b];
-    if(type===SOIL)return ['#977858','#c8a77c','#aa865e','#bcb4a5','#826b56','#716559'][b];
+    if(type===SOIL)return '#a98763'; // All painted soil has the same earthy mid-brown tone.
     if(type===SAND)return b===1?'#edcf83':'#ebca89';
     return null;
   }
