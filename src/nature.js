@@ -105,6 +105,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       else if(b===5)moisture[i]=Math.max(moisture[i],88);
       else if(b===1)moisture[i]=Math.min(moisture[i],22);
       terrainUpdated(i);
+      if(growth[i])species[i]=assignSpecies(i);
     }
   }
   function rain(storms,dt){
@@ -124,11 +125,14 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       const i=Math.floor(Math.random()*terrain.length),t=terrain[i],b=biome[i];
       if(t===SOIL&&b!==1&&b!==3){
         // Wet soil greens quickly; ordinary climate occasionally grows wild grass.
-        if(moisture[i]>70&&Math.random()<.40 || moisture[i]>26&&Math.random()<.012){
+        if(moisture[i]>70&&Math.random()<.022 || moisture[i]>26&&Math.random()<.009){
           terrain[i]=GRASS;onTerrainChange(i);
         }
       }
-      if(t===GRASS&&!growth[i]&&moisture[i]>35&&Math.random()<.0015)seedAt(i%W,Math.floor(i/W));
+      if(!growth[i]&&(
+          (t===GRASS&&moisture[i]>35)||
+          (b===1&&t===SAND)||(b===3&&t===SNOW)
+        )&&Math.random()<.0015)seedAt(i%W,Math.floor(i/W));
       if(moisture[i]>0&&Math.random()<.20)moisture[i]--;
     }
     let wetChecked=0;
@@ -166,7 +170,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       y1=Math.min(H,Math.ceil((view.y+vh/view.z/2)/T)+3);
     let count=0;
     for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
-      const i=I(x,y),g=growth[i];if(!g||++count>700)continue;
+      const i=I(x,y),g=growth[i];if(!g||++count>500)continue;
       const sp=species[i]||assignSpecies(i),size=(g===255?1:.13+.87*g/255);
       const px=(x+.5)*T,py=(y+.5)*T,sway=Math.sin(time*1.3+x*.7+y*.5)*.55;
       ctx.save();ctx.translate(px,py);ctx.scale(Math.max(.15,size),Math.max(.15,size));
@@ -175,6 +179,16 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
         ctx.strokeStyle='#318867';ctx.lineWidth=3.5;ctx.lineCap='round';
         ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-10);ctx.moveTo(0,-4);ctx.lineTo(-4,-4);
         ctx.lineTo(-4,-8);ctx.moveTo(0,-6);ctx.lineTo(4,-6);ctx.lineTo(4,-9);ctx.stroke();
+      }else if(sp===3){ // palm
+        ctx.strokeStyle='#b39562';ctx.lineWidth=2.4;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(0,3);ctx.quadraticCurveTo(3+sway,-5,sway,-13);ctx.stroke();
+        for(let k=0;k<6;k++){
+          const a=k*Math.PI/3,dx=Math.cos(a)*8,dy=Math.sin(a)*4;
+          ctx.strokeStyle=k%2?'#53ad69':'#34875b';ctx.lineWidth=2.9;
+          ctx.beginPath();ctx.moveTo(sway,-13);
+          ctx.quadraticCurveTo(sway+dx*.75,-16+dy*.4,sway+dx,-13+dy+2);
+          ctx.stroke();
+        }
       }else if(sp===5){ // fir
         ctx.strokeStyle='#81694d';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-9);ctx.stroke();
         for(let j=0;j<3;j++){const yy=-4-j*4,w=6-j*1.4;
