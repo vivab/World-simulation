@@ -25,14 +25,19 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     seed=worldSeed|0;elapsed=0;clock=0;overrides.clear();drops.length=0;recentlyWatered.clear();
     moisture.fill(0);growth.fill(0);species.fill(0);
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      const i=I(x,y),t=terrain[i],r=hash(x>>3,y>>3,seed+218);
+      const i=I(x,y),t=terrain[i];
+      const fx=x/24,fy=y/24,gx=Math.floor(fx),gy=Math.floor(fy),
+        ux=(fx-gx)**2*(3-2*(fx-gx)),uy=(fy-gy)**2*(3-2*(fy-gy));
+      const top=hash(gx,gy,seed+218)*(1-ux)+hash(gx+1,gy,seed+218)*ux;
+      const bottom=hash(gx,gy+1,seed+218)*(1-ux)+hash(gx+1,gy+1,seed+218)*ux;
+      const r=top*(1-uy)+bottom*uy;
       const latitude=Math.abs(y/H-.48);
       let b;
       if(latitude>.39)b=3;
-      else if(r<.16)b=1;
-      else if(r<.33)b=2;
-      else if(r>.79)b=4;
-      else if(r>.64)b=5;
+      else if(r<.31)b=1;
+      else if(r<.45)b=2;
+      else if(r>.71)b=4;
+      else if(r>.59)b=5;
       else b=0;
       biome[i]=b;
       if(t<2||t===8||t===5)continue;
@@ -105,7 +110,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   function rain(storms,dt){
     // A shower wets soil; it cannot create a flood or accumulating water cells.
     for(const s of storms){
-      const attempts=storms.length>35?1:3;
+      const attempts=storms.length>35?2:Math.max(3,Math.floor(20/Math.sqrt(storms.length)));
       for(let n=0;n<attempts;n++){
         const a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*s.radius/T;
         const x=Math.floor(s.x/T+Math.cos(a)*r),y=Math.floor(s.y/T+Math.sin(a)*r);
@@ -141,10 +146,10 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     for(let i=0;i<growth.length;i++){
       const g=growth[i];if(!g||g===255)continue;
       const b=biome[i],need=b===1?1:b===3?5:12;
-      if(moisture[i]>=need&&Math.random()<(moisture[i]>80?.35:.12)){
-        growth[i]=Math.min(255,g+Math.max(1,Math.round(moisture[i]/65)));
+      if(moisture[i]>=need&&Math.random()<(moisture[i]>80?.65:.26)){
+        growth[i]=Math.min(255,g+(moisture[i]>80?7:3));
       }else if(b===1||b===3){
-        if(Math.random()<.07)growth[i]=Math.min(255,g+1);
+        if(Math.random()<.15)growth[i]=Math.min(255,g+3);
       }
     }
   }
