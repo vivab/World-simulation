@@ -390,25 +390,43 @@
     }catch(e){return false;}
   }
   function bindInput(){
+    let painting=null;
     const point=e=>{const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top,t:performance.now()};};
     const startPinch=()=>{
       const [a,b]=[...pointers.values()];
       const x=(a.x+b.x)/2,y=(a.y+b.y)/2;
       pinchStart={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),
         zoom:targetCamera.z,anchor:screenToWorld(x,y,targetCamera)};
-      dragStart=null;gestureMoved=true;motion.vx=motion.vy=0;
+      dragStart=null;painting=null;gestureMoved=true;motion.vx=motion.vy=0;
     };
     canvas.addEventListener('pointerdown',e=>{
       e.preventDefault();canvas.setPointerCapture(e.pointerId);
       const p=point(e),previous=pointers.size;pointers.set(e.pointerId,p);
       motion.vx=motion.vy=0;
-      if(previous===0){gestureMoved=false;dragStart={x:p.x,y:p.y,cx:targetCamera.x,cy:targetCamera.y,prev:p,vx:0,vy:0};pinchStart=null;}
+      if(previous===0){
+        gestureMoved=false;lastBrushCell='';lastRainSpot=null;
+        dragStart={x:p.x,y:p.y,cx:targetCamera.x,cy:targetCamera.y,prev:p,vx:0,vy:0};
+        pinchStart=null;
+        if(PAINT_TOOLS.has(state.tool)){
+          painting={x:p.x,y:p.y};dragStart=null;gestureMoved=true;paintBrush(p.x,p.y);
+        }
+      }
       if(pointers.size===2)startPinch();
       if(pointers.size>2){dragStart=null;gestureMoved=true;}
     });
     canvas.addEventListener('pointermove',e=>{
       if(!pointers.has(e.pointerId))return;
       const p=point(e);pointers.set(e.pointerId,p);
+      if(pointers.size===1&&painting){
+        const dx=p.x-painting.x,dy=p.y-painting.y;
+        const distance=Math.hypot(dx,dy);
+        const segments=Math.min(90,Math.max(1,Math.ceil(distance/Math.max(5,TILE*camera.z*1.6))));
+        for(let k=1;k<=segments;k++){
+          const t=k/segments;
+          paintBrush(painting.x+dx*t,painting.y+dy*t);
+        }
+        painting={x:p.x,y:p.y};gestureMoved=true;return;
+      }
       if(pointers.size===2){
         if(!pinchStart)startPinch();
         const [a,b]=[...pointers.values()];
@@ -442,6 +460,7 @@
         if(age<85){motion.vx=dragStart.vx*.65;motion.vy=dragStart.vy*.65;}
       }
       pointers.delete(e.pointerId);
+      if(wasLast)painting=null;
       if(pointers.size===1){
         const remaining=[...pointers.values()][0];
         dragStart={x:remaining.x,y:remaining.y,cx:targetCamera.x,cy:targetCamera.y,prev:remaining,vx:0,vy:0};
@@ -462,6 +481,8 @@
       motion.vx=motion.vy=0;clampCamera(targetCamera);
     });
     document.querySelectorAll('.tool').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+    document.querySelectorAll('.tool-tab').forEach(b=>b.addEventListener('click',()=>selectCategory(b.dataset.category)));
+    selectCategory('world');
     document.querySelectorAll('.speed').forEach(b=>b.addEventListener('click',()=>{
       state.speed=Number(b.dataset.speed);state.paused=false;$('pause').textContent='Ⅱ';
       document.querySelectorAll('.speed').forEach(el=>el.classList.toggle('active',el===b));
