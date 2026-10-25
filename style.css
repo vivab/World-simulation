@@ -85,3 +85,11 @@ button:active{transform:scale(.96)}
  .tool-icon{height:18px;font-size:18px}
  .map-wrap{bottom:calc(env(safe-area-inset-bottom) + 135px)}
 }
+
+/* WorldSimulation 0.4: smooth illustrated map, retain crisp readable controls. */
+#world{image-rendering:auto;filter:saturate(1.055) contrast(.99)}
+.map-wrap canvas{image-rendering:auto}
+#game{background:#4d9cc2}
+.tool-tab,.tool,.header-btn,.controls button{border-radius:14px}
+.tool-icon{font-family:system-ui,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
+.tool:active,.tool-tab:active{transform:scale(.97)}
