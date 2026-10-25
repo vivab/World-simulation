@@ -13,7 +13,7 @@
   worldCanvas.width = W*TILE; worldCanvas.height = H*TILE;
   const tctx = worldCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
-  let terrainDirty=false,terrainRedrawAt=0;
+  let terrainDirty=false,terrainRedrawAt=0,terrainResolution=0;
   function markTerrain(index){
     terrainDirty=true;
     if(Number.isInteger(index)&&index>=0&&index<terrain.length){
@@ -88,7 +88,8 @@
   }
   function drawTerrain(){
     // Four texels per cell keep blended shorelines crisp at phone zoom.
-    const DETAIL_RES=4;
+    // Use a light preview while painting and a finer image when zoomed in.
+    const DETAIL_RES=(camera.z<1.1||(pointers.size&&PAINT_TOOLS.has(state.tool)))?2:4;
     const width=W*DETAIL_RES,height=H*DETAIL_RES;
     const low=document.createElement('canvas');low.width=width;low.height=height;
     const lc=low.getContext('2d');
@@ -167,7 +168,7 @@
         tctx.beginPath();tctx.moveTo(px-3,py);tctx.quadraticCurveTo(px,py-2,px+3,py);tctx.stroke();
       }
     }
-    drawMinimap();terrainDirty=false;
+    drawMinimap();terrainDirty=false;terrainResolution=DETAIL_RES;
   }
 
 
@@ -494,7 +495,10 @@
         updateHouses(elements.step(dt*state.speed,state.storms));
       }
     }
-    if(terrainDirty&&timestamp-terrainRedrawAt>(pointers.size?210:520)){drawTerrain();terrainRedrawAt=timestamp;}
+    const wantedRes=(camera.z<1.1||(pointers.size&&PAINT_TOOLS.has(state.tool)))?2:4;
+    if(terrainResolution!==wantedRes)terrainDirty=true;
+    const redrawDelay=pointers.size?220:camera.z>=1.1?860:620;
+    if(terrainDirty&&timestamp-terrainRedrawAt>redrawDelay){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
