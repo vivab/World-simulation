@@ -125,14 +125,14 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       const i=Math.floor(Math.random()*terrain.length),t=terrain[i],b=biome[i];
       if(t===SOIL&&b!==1&&b!==3){
         // Wet soil greens quickly; ordinary climate occasionally grows wild grass.
-        if(moisture[i]>70&&Math.random()<.022 || moisture[i]>26&&Math.random()<.009){
+        if((moisture[i]>70&&Math.random()<.0035) || (moisture[i]>26&&Math.random()<.0009)){
           terrain[i]=GRASS;onTerrainChange(i);
         }
       }
       if(!growth[i]&&(
           (t===GRASS&&moisture[i]>35)||
           (b===1&&t===SAND)||(b===3&&t===SNOW)
-        )&&Math.random()<.0015)seedAt(i%W,Math.floor(i/W));
+        )&&Math.random()<.00035)seedAt(i%W,Math.floor(i/W));
       if(moisture[i]>0&&Math.random()<.20)moisture[i]--;
     }
     let wetChecked=0;
