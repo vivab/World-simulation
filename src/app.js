@@ -123,14 +123,16 @@
       const type=terrain[at(x,y)],px=x*TILE+4,py=y*TILE+4;
       const sample=hash(x,y,state.seed+19);
       if(type===4&&sample>.48){
-        const size=4.2+hash(x,y,state.seed+23)*2.5;
-        tctx.fillStyle='rgba(37,82,53,.24)';
-        tctx.beginPath();tctx.ellipse(px+1.4,py+2.8,size*1.05,size*.56,-.3,0,Math.PI*2);tctx.fill();
-        tctx.strokeStyle='#927555';tctx.lineWidth=1.7;
-        tctx.beginPath();tctx.moveTo(px,py+3);tctx.lineTo(px,py-1);tctx.stroke();
-        tctx.fillStyle='#338856';tctx.beginPath();tctx.arc(px-1.8,py-.7,size*.68,0,Math.PI*2);tctx.fill();
-        tctx.fillStyle='#51ac64';tctx.beginPath();tctx.arc(px+1.6,py-2.2,size*.79,0,Math.PI*2);tctx.fill();
-        tctx.fillStyle='#8bce78';tctx.beginPath();tctx.arc(px-.5,py-3.6,size*.47,0,Math.PI*2);tctx.fill();
+        // Legacy forest tiles from old saves: natural shaded leaves, not toy balls.
+        const size=3.9+hash(x,y,state.seed+23)*2;
+        tctx.fillStyle='rgba(26,55,38,.23)';
+        tctx.beginPath();tctx.ellipse(px+1.7,py+3,size*1.15,size*.46,-.2,0,Math.PI*2);tctx.fill();
+        tctx.strokeStyle='#72634f';tctx.lineWidth=1.45;
+        tctx.beginPath();tctx.moveTo(px,py+3);tctx.lineTo(px+.3,py-2);
+        tctx.moveTo(px,py-1);tctx.lineTo(px-2,py-4);tctx.stroke();
+        tctx.fillStyle='#355d44';tctx.beginPath();tctx.ellipse(px-1.7,py-2.9,size*.83,size*.67,-.18,0,Math.PI*2);tctx.fill();
+        tctx.fillStyle='#507953';tctx.beginPath();tctx.ellipse(px+1.6,py-3.8,size*.75,size*.72,.14,0,Math.PI*2);tctx.fill();
+        tctx.fillStyle='#668560';tctx.beginPath();tctx.ellipse(px-1,py-5.1,size*.46,size*.41,-.14,0,Math.PI*2);tctx.fill();
       }else if((type===3||type===7||type===10)&&sample>.88){
         tctx.strokeStyle=type===3?'rgba(63,136,67,.45)':'rgba(152,116,63,.28)';
         tctx.lineWidth=.85;tctx.lineCap='round';tctx.beginPath();
