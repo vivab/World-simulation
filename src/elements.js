@@ -64,9 +64,9 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
      for(const j of adj){
        if(A[j]||B[j])continue;
        if((terrain[j]===4||terrain[j]===3||terrain[j]===7)
-          &&Math.random()<(terrain[j]===4?.2:.06)){B[j]=2;Q[j]=6;dirty=true;}
+          &&Math.random()<(terrain[j]===4?.055:.006)){B[j]=2;Q[j]=6;dirty=true;}
      }
-     if(Math.random()<.27)Q[i]=Math.max(0,Q[i]-1);
+     if(Math.random()<.42)Q[i]=Math.max(0,Q[i]-1);
    }else{
      for(const j of adj){
        if(A[j]===1){B[i]=Q[i]=0;B[j]=Q[j]=0;dirty=true;
@@ -99,7 +99,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
   let n=0;while(timer>=.14&&n<3){timer-=.14;tick(storms);n++;}
   if(dirty)texture();
  }
- function reset(){A.fill(0);P.fill(0);B.fill(0);Q.fill(0);dirty=true;timer=0;}
+ function reset(){A.fill(0);P.fill(0);B.fill(0);Q.fill(0);cx.clearRect(0,0,W,H);dirty=true;timer=0;}
  function serialize(){const out=[];for(let i=0;i<A.length;i++)if(A[i])out.push([i,A[i],P[i]]);return out;}
  function restore(data){reset();if(Array.isArray(data))for(const row of data.slice(0,A.length)){
    const [i,t,p]=row;if(Number.isInteger(i)&&i>=0&&i<A.length&&t>=1&&t<=4){
