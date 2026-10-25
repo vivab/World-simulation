@@ -32,3 +32,56 @@ button:active{transform:scale(.96)}
 @media(prefers-reduced-motion:reduce){
   button,.tool,.header-btn,.controls button,.info strong,.info p{transition:none}
 }
+
+/* Alpha 0.3 — friendlier colorful sandbox UI and independent tool shelves */
+:root{
+ --bg:#284458;--panel:rgba(36,57,63,.89);--gold:#fbd78a;
+ --mint:#c6f0bd;--ink:#fff7df;--line:rgba(230,246,220,.22);
+}
+#game{background:#3b7395}
+.brand-mark{border-radius:12px;background:#ffe19c;color:#4a635a;clip-path:none}
+.header-btn,.controls button,.stats,.info,.map-wrap,.toolbar-area,.tool,.tool-tab{
+ border-radius:12px;
+}
+.header-btn,.controls button,.tool,.tool-tab{
+ box-shadow:0 3px 9px rgba(11,27,32,.15);
+}
+.toolbar-area{width:min(740px,calc(100% - 22px));padding:12px}
+.tool-tabs{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;
+ margin:0 0 9px;padding:1px 1px 4px;touch-action:pan-x;overscroll-behavior-x:contain;
+ -webkit-overflow-scrolling:touch}
+.tool-tabs::-webkit-scrollbar{display:none}
+.tool-tab{border:1px solid #ffffff26;color:#e3ecdf;background:#34494e;
+ padding:9px 13px;white-space:nowrap;flex:1 0 auto;font-size:12px;font-weight:800;
+ letter-spacing:.2px}
+.tool-tab.active{background:#f7d18c;color:#344540;border-color:#ffe7af;
+ box-shadow:0 4px 14px #1d2c2350}
+.toolbar{display:flex;grid-template-columns:none;gap:7px;overflow-x:auto;
+ scrollbar-width:none;scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+ -webkit-overflow-scrolling:touch;touch-action:pan-x;padding:2px 1px 4px}
+.toolbar::-webkit-scrollbar{display:none}
+.tool{flex:0 0 85px;min-width:85px;min-height:67px;scroll-snap-align:start;
+ background:#426168;border-color:#aedac05e;font-size:11px}
+.tool[hidden]{display:none!important}
+.tool.active{background:#527960;border-color:#ffdf99;color:#ffe7b3}
+.tool-icon{color:#dff8e1}
+.tool:hover{background:#587a74}
+.info{background:rgba(34,54,59,.89)}
+@media(max-width:650px){
+ .toolbar-area{width:calc(100% - 12px);bottom:calc(env(safe-area-inset-bottom) + 6px);
+ padding:7px 8px 7px}
+ .tool-tabs{gap:5px;margin-bottom:4px}
+ .tool-tab{font-size:11px;padding:8px 8px}
+ .tool{flex:0 0 73px;min-width:73px;min-height:61px;font-size:10px}
+ .tool-icon{font-size:23px;height:29px}
+ .hint{bottom:calc(env(safe-area-inset-bottom) + 170px);font-size:10px}
+ .map-wrap{bottom:calc(env(safe-area-inset-bottom) + 212px)}
+}
+@media(max-height:620px){
+ .tool-tab{padding:5px 7px}
+ .toolbar-area{padding:4px}
+ .tool-tabs{margin-bottom:2px}
+ .tool{min-height:43px;gap:1px}
+ .tool-icon{height:18px;font-size:18px}
+ .map-wrap{bottom:calc(env(safe-area-inset-bottom) + 135px)}
+}
