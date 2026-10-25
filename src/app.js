@@ -1,11 +1,11 @@
-/* WorldSimulation alpha 0.1 — deliberately dependency-free for GitHub Pages. */
+/* WorldSimulation alpha 0.3 — mobile-friendly world physics sandbox. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
   const COLORS = ['#e9b56e', '#ca98e2', '#89d4c9', '#e47e83', '#bed678'];
   const NAMES = ['Аурелия', 'Нордхейм', 'Валория', 'Элирия', 'Равенхольд', 'Соларис', 'Аркания', 'Эстерия'];
   const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река'];
-  const PALETTE = ['#1c3a50', '#326079', '#cfbf8b', '#79ab6a', '#46784c', '#8b8e7e', '#d3d8cd', '#c6ad72', '#4e94b3'];
+  const PALETTE = ['#225a83', '#498bb6', '#f3d78d', '#92c77b', '#52a46c', '#999ba0', '#d9dee1', '#ebbb72', '#6eb8db'];
   const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d', {alpha:false});
   const minimap = document.querySelector('#minimap'), miniCtx = minimap.getContext('2d');
   const $ = id => document.getElementById(id);
@@ -13,6 +13,11 @@
   worldCanvas.width = W*TILE; worldCanvas.height = H*TILE;
   const tctx = worldCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
+  let terrainDirty=false,terrainRedrawAt=0;
+  const elements=window.createWorldElements({width:W,height:H,tile:T,terrain,altitude,
+    onTerrainChange:()=>{terrainDirty=true;}});
+  const PAINT_TOOLS=new Set(['ground','forest','sand','rock','mountain','water','fire','acid','lava','rain','meteor','volcano']);
+  let activeCategory='world',lastBrushCell='',lastRainSpot=null;
   const camera = {x:0,y:0,z:1};
   // Rendered camera follows the target instead of snapping to touch input.
   const targetCamera = {x:0,y:0,z:1};
@@ -61,7 +66,7 @@
         if(!best||bestValue>altitude[i]+.012)break;[x,y]=best;
       }
     }
-    drawTerrain();
+    elements.reset();drawTerrain();
   }
   function drawTerrain() {
     const img=tctx.createImageData(W*TILE,H*TILE), d=img.data;
@@ -81,7 +86,7 @@
         d[idx]=clamp(base[0]+shade,0,255);d[idx+1]=clamp(base[1]+shade,0,255);d[idx+2]=clamp(base[2]+shade,0,255);d[idx+3]=255;
       }
     }
-    tctx.putImageData(img,0,0);drawMinimap();
+    tctx.putImageData(img,0,0);drawMinimap();terrainDirty=false;
   }
   function chooseLand(minDistance=0,near=null) {
     for(let attempts=0;attempts<1800;attempts++){
@@ -210,11 +215,14 @@
       state.effects=state.effects.filter(e=>(e.life-=dt)>0);
       if(!state.paused)state.weatherTime+=dt;
       state.storms=state.storms.filter(storm=>state.weatherTime-storm.start<storm.duration);
+      if(!state.paused)elements.step(dt*state.speed,state.storms);
     }
+    if(terrainDirty&&timestamp-terrainRedrawAt>110){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
     ctx.imageSmoothingEnabled=false;ctx.drawImage(worldCanvas,0,0);
+    elements.draw(ctx);
     for(const c of state.cities){
       const x=c.x*TILE+4,y=c.y*TILE+4;
       if(Math.abs(x-camera.x)>viewW/camera.z/2+100||Math.abs(y-camera.y)>viewH/camera.z/2+100)continue;
@@ -245,7 +253,12 @@
   // Stable hashed particles give smooth 60fps motion without creating objects each frame.
   function drawWeather(){
     if(!state.storms.length)return;
-    for(const storm of state.storms){
+    const visible=state.storms.filter(st=>
+      Math.abs(st.x-camera.x)<viewW/(2*camera.z)+st.radius&&
+      Math.abs(st.y-camera.y)<viewH/(2*camera.z)+st.radius);
+    const dropsPerStorm=Math.max(7,Math.min(165,Math.floor(2300/Math.max(1,visible.length))));
+    const splashCount=Math.max(2,Math.floor(14/Math.sqrt(Math.max(1,visible.length))));
+    for(const storm of visible){
       const age=Math.max(0,state.weatherTime-storm.start);
       const fade=clamp(age/.65,0,1)*clamp((storm.duration-age)/1.4,0,1);
       if(fade<=0)continue;
@@ -259,7 +272,7 @@
       shadow.addColorStop(.72,'rgba(36,73,93,.24)');
       shadow.addColorStop(1,'rgba(46,91,107,0)');
       ctx.globalAlpha=fade;ctx.fillStyle=shadow;ctx.fillRect(x-r,y-r,r*2,r*2);
-      const count=clamp(Math.round(85*camera.z+40),55,165);
+      const count=Math.min(dropsPerStorm,clamp(Math.round(85*camera.z+40),55,165));
       const fall=18; // World pixels per second at normal speed.
       const length=clamp(8/camera.z,5,18);
       ctx.strokeStyle='#c9f3ff';ctx.lineWidth=clamp(1.05/camera.z,.6,3);
@@ -274,7 +287,7 @@
       ctx.stroke();
       // Little concentric ripples appear where droplets meet water and soil.
       ctx.strokeStyle='#ddf7ff';ctx.lineWidth=clamp(.8/camera.z,.6,2);
-      for(let i=0;i<18;i++){
+      for(let i=0;i<splashCount;i++){
         const local=(age*.85+hash(i,23,storm.seed))%1;
         const spread=hash(i,88,storm.seed),angle=hash(i,93,storm.seed)*Math.PI*2;
         const px=x+Math.cos(angle)*r*.91*spread,py=y+Math.sin(angle)*r*.91*spread;
@@ -285,55 +298,84 @@
       ctx.restore();
     }
   }
+
   function modifyTerrain(cx,cy,tool){
-    let dirty=false;
-    const radius=tool==='meteor'?7:tool==='rain'?11:7;
-    for(let y=Math.max(0,cy-radius);y<Math.min(H,cy+radius);y++)for(let x=Math.max(0,cx-radius);x<Math.min(W,cx+radius);x++){
-      const dist=Math.hypot(x-cx,y-cy);if(dist>radius*(.85+hash(x,y,state.seed)*.3))continue;
-      const i=at(x,y),t=terrain[i];let next=t;
-      if(tool==='forest'&&(t===3||t===7||t===2))next=4;
-      if(tool==='rain'&&(t===7||t===2))next=3;
-      if(tool==='meteor')next=dist<3?0:dist<4.7?1:t===4?3:t;
-      if(next!==t){terrain[i]=next;state.changes[i]=next;dirty=true;}
+    if(cx<0||cy<0||cx>=W||cy>=H)return;
+    if(tool==='rain'){
+      const radius=11;
+      state.storms.push({x:cx*TILE+4,y:cy*TILE+4,radius:radius*TILE,
+        start:state.weatherTime,duration:12,seed:Math.floor(random()*2147483647)});
+      for(const c of state.cities)if(Math.hypot(c.x-cx,c.y-cy)<radius+5)c.food+=7;
+      return;
     }
     if(tool==='meteor'){
-      state.cities=state.cities.filter(c=>Math.hypot(c.x-cx,c.y-cy)>radius);
-      const ids=new Set(state.cities.map(c=>c.id));state.units=state.units.filter(u=>ids.has(u.city));
+      for(let y=Math.max(0,cy-7);y<Math.min(H,cy+8);y++)for(let x=Math.max(0,cx-7);x<Math.min(W,cx+8);x++){
+        const d=Math.hypot(x-cx,y-cy),i=at(x,y);let type=terrain[i];
+        if(d<3)type=0;else if(d<4.6)type=1;else if(d<7&&type===4)type=3;
+        if(terrain[i]!==type){terrain[i]=type;state.changes[i]=type;terrainDirty=true;}
+      }
+      state.cities=state.cities.filter(c=>Math.hypot(c.x-cx,c.y-cy)>7);
+      const ids=new Set(state.cities.map(c=>c.id));
+      state.units=state.units.filter(u=>ids.has(u.city));
+      state.effects.push({x:cx,y:cy,life:1.4,max:1.4,radius:7,color:'#ffd17f'});
+      updateStats();return;
     }
-    if(tool==='rain'){
-      for(const c of state.cities)if(Math.hypot(c.x-cx,c.y-cy)<radius+5)c.food+=15;
-      // A bounded number of animated rain zones keeps mobile GPU work predictable.
-      state.storms.push({x:cx*TILE+TILE/2,y:cy*TILE+TILE/2,
-        radius:radius*TILE,start:state.weatherTime,duration:10,seed:Math.floor(random()*2147483647)});
-      if(state.storms.length>4)state.storms.shift();
-    }
-    if(dirty)drawTerrain();updateStats();
-    const colors={forest:'#8ee19e',rain:'#8ccce4',meteor:'#ffd17f'};
-    state.effects.push({x:cx,y:cy,life:1.4,max:1.4,radius,color:colors[tool]});
+    const radius=tool==='volcano'?5:tool==='forest'||tool==='ground'||tool==='sand'?3:2;
+    elements.paint(cx,cy,tool,radius);
+    // Store only terrain changes; elemental cells are stored separately.
+  }
+  function paintBrush(sx,sy){
+    const p=screenToWorld(sx,sy),x=Math.floor(p.x/TILE),y=Math.floor(p.y/TILE);
+    if(x<0||y<0||x>=W||y>=H)return;
+    const id=state.tool+':'+x+','+y;
+    if(id===lastBrushCell)return;
+    if(state.tool==='rain'&&lastRainSpot&&Math.hypot(x-lastRainSpot.x,y-lastRainSpot.y)<7)return;
+    if(state.tool==='meteor'&&lastRainSpot&&Math.hypot(x-lastRainSpot.x,y-lastRainSpot.y)<9)return;
+    lastBrushCell=id;
+    if(state.tool==='rain'||state.tool==='meteor')lastRainSpot={x,y};
+    modifyTerrain(x,y,state.tool);
   }
   function action(sx,sy){
     const p=screenToWorld(sx,sy),x=Math.floor(p.x/TILE),y=Math.floor(p.y/TILE);
     if(x<0||y<0||x>=W||y>=H)return;
     const tool=state.tool,terrainType=terrain[at(x,y)];
+    if(PAINT_TOOLS.has(tool)){paintBrush(sx,sy);return;}
     if(tool==='village'){
       if(!isLand(x,y)){toast('Поселение можно поставить только на суше');return;}
       if(!createCity(x,y))toast('Слишком близко к другому городу');return;
     }
-    if(tool==='forest'||tool==='rain'||tool==='meteor'){
-      modifyTerrain(x,y,tool);
-      setInfo(({forest:'Зелёный дар',rain:'Благодатный дождь',meteor:'Удар метеорита'})[tool],
-        ({forest:'Новые леса покрывают землю.',rain:'Капли дождя падают на землю. Дождь питает растения и пополняет запасы пищи в поселениях.',meteor:'Метеорит меняет ландшафт и разрушает поселения в зоне удара.'})[tool]);return;
-    }
     const nearest=state.cities.find(c=>Math.hypot(c.x-x,c.y-y)<6);
-    if(nearest){setInfo(nearest.name,`Население: ${nearest.pop} · Пища: ${nearest.food} · Основано: ${state.year-nearest.age} год. Здесь живут и развиваются жители.`);}
-    else setInfo(BIOME[terrainType],`Участок ${x}:${y}. Высота: ${Math.round(altitude[at(x,y)]*100)}%. Выбери силу создателя, чтобы повлиять на эту землю.`);
+    if(nearest){setInfo(nearest.name,`Население: ${nearest.pop} · Пища: ${nearest.food} · Основано: ${state.year-nearest.age} год.`);}
+    else setInfo(BIOME[terrainType],`Участок ${x}:${y}. Высота: ${Math.round(altitude[at(x,y)]*100)}%.`);
   }
-  function setTool(tool){state.tool=tool;document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('active',el.dataset.tool===tool));
-    const labels={look:'Исследовать мир',village:'Коснись суши для основания',forest:'Создать новый лес',rain:'Оживить засушливые земли',meteor:'Вызвать падение метеорита',inspect:'Коснись города или биома'};
-    $('toolDescription').textContent=labels[tool];canvas.style.cursor=tool==='look'?'grab':'crosshair';
+  function selectCategory(category){
+    activeCategory=category;
+    document.querySelectorAll('.tool-tab').forEach(el=>{
+      const active=el.dataset.category===category;
+      el.classList.toggle('active',active);el.setAttribute('aria-selected',String(active));
+    });
+    document.querySelectorAll('.tool').forEach(el=>{
+      el.hidden=el.dataset.category!==category;
+    });
+    const first=document.querySelector('.tool[data-category="'+category+'"]');
+    if(first)setTool(first.dataset.tool);
+    $('toolbar').scrollLeft=0;
+  }
+  function setTool(tool){
+    state.tool=tool;lastBrushCell='';lastRainSpot=null;
+    document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('active',el.dataset.tool===tool));
+    const labels={look:'Перемещение и масштаб',inspect:'Осмотреть мир',
+      ground:'Рисуй землю пальцем',forest:'Рисуй лес пальцем',sand:'Песок',rock:'Камни',
+      mountain:'Заснеженные горы',water:'Вода растекается и тушит огонь',
+      rain:'Можно создавать сколько угодно дождей',fire:'Огонь распространяется по растениям',
+      acid:'Кислота разрушает камни и растения',lava:'Горячая лава течёт и остывает',
+      volcano:'Создать вулкан и лаву',meteor:'Падение метеорита',
+      village:'Коснись суши для основания'};
+    $('toolDescription').textContent=labels[tool]||tool;
+    canvas.style.cursor=tool==='look'?'grab':'crosshair';
   }
   function save(silent=false){
-    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes};
+    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes,elements:elements.serialize()};
       localStorage.setItem(SAVE_KEY,JSON.stringify(data));if(!silent)toast('Мир сохранён на этом устройстве');return true;
     }catch(e){if(!silent)toast('Не удалось сохранить мир в браузере');return false;}
   }
@@ -343,7 +385,7 @@
       generate(data.seed);state.year=Math.max(1,data.year||1);
       state.changes=data.changes||{};
       for(const [key,val] of Object.entries(state.changes)){const n=Number(key);if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length)terrain[n]=val;}
-      drawTerrain();state.cities=data.cities.slice(0,22);state.units=data.units.slice(0,600);state.ready=true;updateStats();
+      drawTerrain();elements.restore(data.elements);state.cities=data.cities.slice(0,22);state.units=data.units.slice(0,600);state.ready=true;updateStats();
       const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}syncCamera();return true;
     }catch(e){return false;}
   }
