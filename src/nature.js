@@ -6,7 +6,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   const BIOMES=['Обычный','Пустыня','Саванна','Зима','Джунгли','Болото'];
   const B={normal:0,desert:1,savanna:2,winter:3,jungle:4,swamp:5};
   const biome=new Uint8Array(W*H),moisture=new Uint8Array(W*H),growth=new Uint8Array(W*H);
-  const species=new Uint8Array(W*H),overrides=new Map(),drops=[];
+  const species=new Uint8Array(W*H),overrides=new Map(),drops=[],recentlyWatered=new Set();
   const I=(x,y)=>y*W+x,valid=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
   const hash=(x,y,seed)=>{
     let t=Math.imul((x+1)|0,374761393)^Math.imul((y+1)|0,668265263)^(seed|0);
@@ -22,7 +22,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     return [1,2,4,5,6,7][b]||1;
   }
   function initialize(worldSeed){
-    seed=worldSeed|0;elapsed=0;clock=0;overrides.clear();drops.length=0;
+    seed=worldSeed|0;elapsed=0;clock=0;overrides.clear();drops.length=0;recentlyWatered.clear();
     moisture.fill(0);growth.fill(0);species.fill(0);
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
       const i=I(x,y),t=terrain[i],r=hash(x>>3,y>>3,seed+218);
@@ -79,7 +79,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       if(!valid(x,y)||(x-cx)**2+(y-cy)**2>radius*radius)continue;
       const i=I(x,y),b=biome[i],t=terrain[i];
       if(t<2||t===5||t===8)continue;
-      if(t!==SNOW)moisture[i]=Math.min(255,moisture[i]+amount);
+      if(t!==SNOW){moisture[i]=Math.min(255,moisture[i]+amount);if(t===SOIL)recentlyWatered.add(i);}
       if(onWater)onWater(x,y);
       if(animate&&drops.length<180)drops.push({x:x*T+T*.5,y:y*T+T*.4,t:0,life:.5+hash(x,y,seed)*.35});
     }
@@ -114,7 +114,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     }
   }
   function tick(){
-    const attempts=150;
+    const attempts=1200;
     for(let k=0;k<attempts;k++){
       const i=Math.floor(Math.random()*terrain.length),t=terrain[i],b=biome[i];
       if(t===SOIL&&b!==1&&b!==3){
@@ -125,6 +125,16 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
       }
       if(t===GRASS&&!growth[i]&&moisture[i]>35&&Math.random()<.0015)seedAt(i%W,Math.floor(i/W));
       if(moisture[i]>0&&Math.random()<.20)moisture[i]--;
+    }
+    let wetChecked=0;
+    for(const i of recentlyWatered){
+      if(++wetChecked>1700)break;
+      if(terrain[i]===SOIL&&biome[i]!==1&&biome[i]!==3){
+        if(moisture[i]>60&&Math.random()<(.13+moisture[i]/900)){
+          terrain[i]=GRASS;onTerrainChange(i);recentlyWatered.delete(i);
+        }
+      }else recentlyWatered.delete(i);
+      if(moisture[i]<12)recentlyWatered.delete(i);
     }
     // Existing planted seeds grow faster on damp soil; spontaneous plants have
     // the same biology but appear much less often.
@@ -196,7 +206,7 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   }
   function restore(data){
     if(!data||typeof data!=='object')return;
-    moisture.fill(0);growth.fill(0);species.fill(0);
+    moisture.fill(0);growth.fill(0);species.fill(0);recentlyWatered.clear();
     if(Array.isArray(data.b))for(const [i,b] of data.b.slice(0,W*H)){
       if(Number.isInteger(i)&&i>=0&&i<biome.length&&Number.isInteger(b)&&b>=0&&b<6){
         biome[i]=b;overrides.set(i,b);
