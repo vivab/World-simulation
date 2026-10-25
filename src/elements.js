@@ -20,7 +20,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
      const i=at(x+dx,y+dy),was=terrain[i];
      let to={ground:3,sand:7,rock:5,mountain:6,forest:4}[kind];
      if(kind==='volcano'){to=d<8?5:undefined;if(d<13)place(x+dx,y+dy,4,9);}
-     if(to!==undefined){if(was!==to){terrain[i]=to;changed();}if(A[i]){A[i]=P[i]=0;dirty=true;}}
+     if(to!==undefined){if(was!==to){terrain[i]=to;changed();}if(A[i]&&kind!=='volcano'){A[i]=P[i]=0;dirty=true;}}
      else if(kind==='water')place(x+dx,y+dy,1);
      else if(kind==='fire')place(x+dx,y+dy,2);
      else if(kind==='acid')place(x+dx,y+dy,3);
@@ -40,7 +40,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
   }
  }
  function tick(storms){
-  frame++;B.set(A);Q.set(P);rain(storms);
+  frame++;rain(storms);B.set(A);Q.set(P);
   const dirs=[[-1,0],[1,0],[0,-1],[0,1]];
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
    const i=at(x,y),t=A[i],p=P[i];if(!t||!p)continue;
