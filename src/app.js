@@ -403,7 +403,7 @@
         updateHouses(elements.step(dt*state.speed,state.storms));
       }
     }
-    if(terrainDirty&&timestamp-terrainRedrawAt>180){drawTerrain();terrainRedrawAt=timestamp;}
+    if(terrainDirty&&timestamp-terrainRedrawAt>(pointers.size?210:520)){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
