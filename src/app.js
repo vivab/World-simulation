@@ -18,7 +18,7 @@
   const targetCamera = {x:0,y:0,z:1};
   const motion = {vx:0,vy:0};
   const syncCamera = () => {camera.x=targetCamera.x;camera.y=targetCamera.y;camera.z=targetCamera.z;motion.vx=0;motion.vy=0;};
-  const state = {seed:1,year:1,cities:[],units:[],effects:[],changes:{},tool:'look',speed:1,paused:false,ready:false,elapsed:0};
+  const state = {seed:1,year:1,cities:[],units:[],effects:[],storms:[],weatherTime:0,changes:{},tool:'look',speed:1,paused:false,ready:false,elapsed:0};
   let random = Math.random, viewW=0, viewH=0, last=0, statsAt=0, toastTimeout=0, moved=false;
   const pointers = new Map(); let dragStart=null,pinchStart=null,gestureMoved=false;
   const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
@@ -108,7 +108,7 @@
     state.units.push({x:city.x+rand(-2,2),y:city.y+rand(-2,2),tx:city.x,ty:city.y,city:city.id,speed:rand(.35,.85)});
   }
   function startNew(seed= Math.floor(Math.random()*4294967295)) {
-    state.year=1;state.cities=[];state.units=[];state.effects=[];state.elapsed=0;
+    state.year=1;state.cities=[];state.units=[];state.effects=[];state.storms=[];state.weatherTime=0;state.elapsed=0;
     generate(seed);
     for(let f=0;f<3;f++){const p=chooseLand(25);if(p)createCity(p.x,p.y,null,true);}
     const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}
@@ -208,6 +208,8 @@
     if(state.ready){
       if(!state.paused){state.elapsed+=dt*state.speed;while(state.elapsed>=2){state.elapsed-=2;updateSim();}updateUnits(dt*state.speed);}
       state.effects=state.effects.filter(e=>(e.life-=dt)>0);
+      if(!state.paused)state.weatherTime+=dt;
+      state.storms=state.storms.filter(storm=>state.weatherTime-storm.start<storm.duration);
     }
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
@@ -226,6 +228,7 @@
       ctx.fillStyle=COLORS[city.faction%COLORS.length];ctx.fillRect(u.x*TILE+2,u.y*TILE+2,3,3);}}
     for(const e of state.effects){const r=(1-e.life/e.max)*e.radius*TILE;
       ctx.strokeStyle=e.color;ctx.lineWidth=2.4;ctx.globalAlpha=e.life/e.max;ctx.beginPath();ctx.arc(e.x*TILE,e.y*TILE,r,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;}
+    drawWeather();
     ctx.restore();
     // Labels remain legible even at low zoom.
     ctx.font='600 11px system-ui';ctx.textAlign='center';ctx.textBaseline='bottom';
@@ -237,6 +240,50 @@
     }
     if(timestamp-statsAt>450){drawMinimapOverlay();statsAt=timestamp;}
     requestAnimationFrame(draw);
+  }
+  // Rain is rendered in world coordinates: storms stay above the land that was tapped.
+  // Stable hashed particles give smooth 60fps motion without creating objects each frame.
+  function drawWeather(){
+    if(!state.storms.length)return;
+    for(const storm of state.storms){
+      const age=Math.max(0,state.weatherTime-storm.start);
+      const fade=clamp(age/.65,0,1)*clamp((storm.duration-age)/1.4,0,1);
+      if(fade<=0)continue;
+      const r=storm.radius,x=storm.x,y=storm.y;
+      if(Math.abs(x-camera.x)>viewW/(2*camera.z)+r||Math.abs(y-camera.y)>viewH/(2*camera.z)+r)continue;
+      ctx.save();
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.clip();
+      // Translucent cloud shadow builds up and fades out softly.
+      const shadow=ctx.createRadialGradient(x,y,5,x,y,r);
+      shadow.addColorStop(0,'rgba(23,55,75,.38)');
+      shadow.addColorStop(.72,'rgba(36,73,93,.24)');
+      shadow.addColorStop(1,'rgba(46,91,107,0)');
+      ctx.globalAlpha=fade;ctx.fillStyle=shadow;ctx.fillRect(x-r,y-r,r*2,r*2);
+      const count=clamp(Math.round(85*camera.z+40),55,165);
+      const fall=18; // World pixels per second at normal speed.
+      const length=clamp(8/camera.z,5,18);
+      ctx.strokeStyle='#c9f3ff';ctx.lineWidth=clamp(1.05/camera.z,.6,3);
+      ctx.lineCap='round';ctx.globalAlpha=fade*.76;ctx.beginPath();
+      for(let i=0;i<count;i++){
+        const a=hash(i,17,storm.seed),b=hash(i,41,storm.seed),v=hash(i,61,storm.seed);
+        const px=x+(a*2-1)*r;
+        const py=y+(((b*2*r+age*fall*(.72+v*.65))%(2*r))-r);
+        if((px-x)*(px-x)+(py-y)*(py-y)>r*r)continue;
+        ctx.moveTo(px,py);ctx.lineTo(px-length*.32,py+length);
+      }
+      ctx.stroke();
+      // Little concentric ripples appear where droplets meet water and soil.
+      ctx.strokeStyle='#ddf7ff';ctx.lineWidth=clamp(.8/camera.z,.6,2);
+      for(let i=0;i<18;i++){
+        const local=(age*.85+hash(i,23,storm.seed))%1;
+        const spread=hash(i,88,storm.seed),angle=hash(i,93,storm.seed)*Math.PI*2;
+        const px=x+Math.cos(angle)*r*.91*spread,py=y+Math.sin(angle)*r*.91*spread;
+        ctx.globalAlpha=fade*(1-local)*.54;
+        ctx.beginPath();ctx.ellipse(px,py,clamp((1+local*5)/camera.z,1,12),
+          clamp((.3+local*1.7)/camera.z,.4,5),0,0,Math.PI*2);ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
   function modifyTerrain(cx,cy,tool){
     let dirty=false;
@@ -253,7 +300,13 @@
       state.cities=state.cities.filter(c=>Math.hypot(c.x-cx,c.y-cy)>radius);
       const ids=new Set(state.cities.map(c=>c.id));state.units=state.units.filter(u=>ids.has(u.city));
     }
-    if(tool==='rain')for(const c of state.cities)if(Math.hypot(c.x-cx,c.y-cy)<radius+5)c.food+=15;
+    if(tool==='rain'){
+      for(const c of state.cities)if(Math.hypot(c.x-cx,c.y-cy)<radius+5)c.food+=15;
+      // A bounded number of animated rain zones keeps mobile GPU work predictable.
+      state.storms.push({x:cx*TILE+TILE/2,y:cy*TILE+TILE/2,
+        radius:radius*TILE,start:state.weatherTime,duration:10,seed:Math.floor(random()*2147483647)});
+      if(state.storms.length>4)state.storms.shift();
+    }
     if(dirty)drawTerrain();updateStats();
     const colors={forest:'#8ee19e',rain:'#8ccce4',meteor:'#ffd17f'};
     state.effects.push({x:cx,y:cy,life:1.4,max:1.4,radius,color:colors[tool]});
@@ -269,7 +322,7 @@
     if(tool==='forest'||tool==='rain'||tool==='meteor'){
       modifyTerrain(x,y,tool);
       setInfo(({forest:'Зелёный дар',rain:'Благодатный дождь',meteor:'Удар метеорита'})[tool],
-        ({forest:'Новые леса покрывают землю.',rain:'Земля озеленяется, а запасы пищи в городах растут.',meteor:'Метеорит меняет ландшафт и разрушает поселения в зоне удара.'})[tool]);return;
+        ({forest:'Новые леса покрывают землю.',rain:'Капли дождя падают на землю. Дождь питает растения и пополняет запасы пищи в поселениях.',meteor:'Метеорит меняет ландшафт и разрушает поселения в зоне удара.'})[tool]);return;
     }
     const nearest=state.cities.find(c=>Math.hypot(c.x-x,c.y-y)<6);
     if(nearest){setInfo(nearest.name,`Население: ${nearest.pop} · Пища: ${nearest.food} · Основано: ${state.year-nearest.age} год. Здесь живут и развиваются жители.`);}
