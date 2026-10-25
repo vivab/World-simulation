@@ -15,7 +15,7 @@
     <header class="header">
       <div class="brand">
         <span class="brand-mark">✺</span>
-        <span><strong>WORLD<span class="brand-em">SIM</span></strong><small>THE LIVING WORLD <span class="version">ALPHA 0.2</span></small></span>
+        <span><strong>WORLD<span class="brand-em">SIM</span></strong><small>THE LIVING WORLD <span class="version">ALPHA 0.3</span></small></span>
       </div>
       <div class="header-actions">
         <button class="header-btn" id="newWorld" title="Создать новый мир" aria-label="Создать новый мир">↻ <span>Новый мир</span></button>
@@ -41,20 +41,36 @@
       <p id="infoText">Мир начинает свою историю. Создавай поселения и наблюдай, как растут цивилизации.</p>
     </aside>
     <div class="map-wrap" aria-label="Миникарта"><canvas id="minimap" width="200" height="128"></canvas><span>КАРТА МИРА</span></div>
-    <div class="hint" id="hint">Перемещай карту пальцем · Раздвигай пальцы для приближения</div>
+    <div class="hint" id="hint">Мир: двигай пальцем · Земля и стихии: рисуй проведением</div>
     <section class="toolbar-area" aria-label="Инструменты бога">
       <div class="tool-label"><span>✦ СИЛЫ СОЗДАТЕЛЯ</span><span id="toolDescription">Исследовать мир</span></div>
-      <nav class="toolbar" id="toolbar">
-        <button class="tool active" data-tool="look"><span class="tool-icon">✥</span><span>Обзор</span></button>
-        <button class="tool" data-tool="village"><span class="tool-icon">♜</span><span>Поселение</span></button>
-        <button class="tool" data-tool="forest"><span class="tool-icon">♣</span><span>Лес</span></button>
-        <button class="tool" data-tool="rain"><span class="tool-icon">☂</span><span>Дождь</span></button>
-        <button class="tool" data-tool="meteor"><span class="tool-icon">☄</span><span>Метеорит</span></button>
-        <button class="tool" data-tool="inspect"><span class="tool-icon">⌕</span><span>Инфо</span></button>
+      <div class="tool-tabs" id="toolTabs" role="tablist" aria-label="Разделы инструментов">
+        <button class="tool-tab active" data-category="world" role="tab" aria-selected="true">🗺️ Мир</button>
+        <button class="tool-tab" data-category="terrain" role="tab" aria-selected="false">🌿 Земля</button>
+        <button class="tool-tab" data-category="elements" role="tab" aria-selected="false">🌊 Стихии</button>
+        <button class="tool-tab" data-category="life" role="tab" aria-selected="false">🏘️ Жизнь</button>
+      </div>
+      <nav class="toolbar" id="toolbar" aria-label="Инструменты выбранного раздела">
+        <button class="tool active" data-category="world" data-tool="look"><span class="tool-icon">✥</span><span>Обзор</span></button>
+        <button class="tool" data-category="world" data-tool="inspect"><span class="tool-icon">⌕</span><span>Инфо</span></button>
+        <button class="tool" data-category="terrain" data-tool="ground" hidden><span class="tool-icon">▦</span><span>Земля</span></button>
+        <button class="tool" data-category="terrain" data-tool="forest" hidden><span class="tool-icon">♣</span><span>Лес</span></button>
+        <button class="tool" data-category="terrain" data-tool="sand" hidden><span class="tool-icon">◈</span><span>Песок</span></button>
+        <button class="tool" data-category="terrain" data-tool="rock" hidden><span class="tool-icon">◆</span><span>Камни</span></button>
+        <button class="tool" data-category="terrain" data-tool="mountain" hidden><span class="tool-icon">▲</span><span>Горы</span></button>
+        <button class="tool" data-category="elements" data-tool="water" hidden><span class="tool-icon">≈</span><span>Вода</span></button>
+        <button class="tool" data-category="elements" data-tool="rain" hidden><span class="tool-icon">☂</span><span>Дождь</span></button>
+        <button class="tool" data-category="elements" data-tool="fire" hidden><span class="tool-icon">♨</span><span>Огонь</span></button>
+        <button class="tool" data-category="elements" data-tool="acid" hidden><span class="tool-icon">✣</span><span>Кислота</span></button>
+        <button class="tool" data-category="elements" data-tool="lava" hidden><span class="tool-icon">♨</span><span>Лава</span></button>
+        <button class="tool" data-category="elements" data-tool="volcano" hidden><span class="tool-icon">🌋</span><span>Вулкан</span></button>
+        <button class="tool" data-category="elements" data-tool="meteor" hidden><span class="tool-icon">☄</span><span>Метеорит</span></button>
+        <button class="tool" data-category="life" data-tool="village" hidden><span class="tool-icon">♜</span><span>Поселение</span></button>
       </nav>
     </section>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </main>
+  <script defer src="./src/elements.js"></script>
   <script defer src="./src/app.js"></script>
 </body>
 </html>
