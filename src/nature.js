@@ -165,6 +165,8 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     for(let i=drops.length-1;i>=0;i--)if(drops[i].t>drops[i].life)drops.splice(i,1);
     while(elapsed>=.45){elapsed-=.45;rain(storms,.45);tick();}
   }
+  // Nature art: subdued colors, visible wood and layered asymmetrical foliage.
+  // Avoid toy-like bright circles while keeping the mobile Canvas renderer light.
   function drawPlants(ctx,view,vw,vh,time){
     const x0=Math.max(0,Math.floor((view.x-vw/view.z/2)/T)-3),
       x1=Math.min(W,Math.ceil((view.x+vw/view.z/2)/T)+3),
@@ -173,44 +175,93 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
     let count=0;
     for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
       const i=I(x,y),g=growth[i];if(!g||++count>500)continue;
-      const sp=species[i]||assignSpecies(i),size=(g===255?1:.13+.87*g/255);
-      const px=(x+.5)*T,py=(y+.5)*T,sway=Math.sin(time*1.3+x*.7+y*.5)*.55;
-      ctx.save();ctx.translate(px,py);ctx.scale(Math.max(.15,size),Math.max(.15,size));
-      ctx.fillStyle='rgba(36,52,39,.22)';ctx.beginPath();ctx.ellipse(1,3,5,2,0,0,Math.PI*2);ctx.fill();
-      if(sp===2){ // cactus
-        ctx.strokeStyle='#318867';ctx.lineWidth=3.5;ctx.lineCap='round';
-        ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-10);ctx.moveTo(0,-4);ctx.lineTo(-4,-4);
-        ctx.lineTo(-4,-8);ctx.moveTo(0,-6);ctx.lineTo(4,-6);ctx.lineTo(4,-9);ctx.stroke();
-      }else if(sp===3){ // palm
-        ctx.strokeStyle='#b39562';ctx.lineWidth=2.4;ctx.lineCap='round';
-        ctx.beginPath();ctx.moveTo(0,3);ctx.quadraticCurveTo(3+sway,-5,sway,-13);ctx.stroke();
-        for(let k=0;k<6;k++){
-          const a=k*Math.PI/3,dx=Math.cos(a)*8,dy=Math.sin(a)*4;
-          ctx.strokeStyle=k%2?'#53ad69':'#34875b';ctx.lineWidth=2.9;
-          ctx.beginPath();ctx.moveTo(sway,-13);
-          ctx.quadraticCurveTo(sway+dx*.75,-16+dy*.4,sway+dx,-13+dy+2);
-          ctx.stroke();
+      const sp=species[i]||assignSpecies(i);
+      const size=g===255?1:.17+.83*g/255;
+      const px=(x+.5)*T,py=(y+.5)*T;
+      const sway=Math.sin(time*.63+x*.47+y*.31)*.18;
+      const v=hash(x,y,seed+301);
+      ctx.save();ctx.translate(px,py);
+      ctx.scale(Math.max(.16,size),Math.max(.16,size));
+      ctx.fillStyle='rgba(28,40,31,.25)';
+      ctx.beginPath();ctx.ellipse(1.6,3.3,5.7,1.8,-.1,0,Math.PI*2);ctx.fill();
+      if(sp===2){ // desert cactus: dark green ribbed stem and thin dry spines
+        ctx.strokeStyle='#315f4c';ctx.lineWidth=3.7;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-11);ctx.stroke();
+        ctx.lineWidth=2.5;ctx.beginPath();
+        ctx.moveTo(0,-3);ctx.lineTo(-4,-3);ctx.lineTo(-4,-8);
+        ctx.moveTo(0,-6);ctx.lineTo(4,-6);ctx.lineTo(4,-9);ctx.stroke();
+        ctx.strokeStyle='#7fa48a';ctx.lineWidth=.7;
+        ctx.beginPath();ctx.moveTo(-.8,1);ctx.lineTo(-.8,-10);ctx.moveTo(1.2,-1);ctx.lineTo(1.2,-9);ctx.stroke();
+      }else if(sp===3){ // palm with bark and long drooping fronds
+        ctx.strokeStyle='#806d52';ctx.lineWidth=2.7;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(0,3);ctx.bezierCurveTo(1,-2,3,-8,sway,-15);ctx.stroke();
+        ctx.strokeStyle='#b19a74';ctx.lineWidth=.6;
+        for(let k=0;k<4;k++){const h=1-k*3;
+          ctx.beginPath();ctx.moveTo(.5+k*.35,h);ctx.lineTo(2+k*.35,h+1.1);ctx.stroke();}
+        const leaf=['#425f45','#536f49','#688151'];
+        for(let k=0;k<7;k++){
+          const a=(k/7)*Math.PI*2,dx=Math.cos(a)*10,dy=Math.sin(a)*5;
+          ctx.strokeStyle=leaf[k%3];ctx.lineWidth=2.3;
+          ctx.beginPath();ctx.moveTo(sway,-15);
+          ctx.quadraticCurveTo(sway+dx*.7,-19+dy*.55,sway+dx,-14+dy+3);ctx.stroke();
         }
-      }else if(sp===5){ // fir
-        ctx.strokeStyle='#81694d';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(0,-9);ctx.stroke();
-        for(let j=0;j<3;j++){const yy=-4-j*4,w=6-j*1.4;
-          ctx.fillStyle=['#2a7359','#3d9367','#66ac79'][j];
-          ctx.beginPath();ctx.moveTo(sway,yy-8);ctx.lineTo(-w,yy+2);ctx.lineTo(w,yy+2);ctx.closePath();ctx.fill();}
-      }else if(sp===4){ // acacia
-        ctx.strokeStyle='#8b7149';ctx.lineWidth=2.3;ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(sway,-7);ctx.stroke();
-        ctx.fillStyle='#819d4c';ctx.beginPath();ctx.ellipse(sway,-9,9,3.6,0,0,Math.PI*2);ctx.fill();
+      }else if(sp===5){ // fir: overlapping jagged layers instead of toy triangles
+        ctx.strokeStyle='#615f50';ctx.lineWidth=1.9;
+        ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(sway,-15);ctx.stroke();
+        const needles=['#234b43','#2d594a','#3d6b51','#55795e'];
+        for(let tier=0;tier<4;tier++){
+          const yy=-2-tier*3.5,wide=6.8-tier*1.25;
+          ctx.fillStyle=needles[tier];ctx.beginPath();
+          ctx.moveTo(sway,yy-7.3);
+          ctx.lineTo(sway-wide*.65,yy-1);ctx.lineTo(sway-wide,yy+.5);
+          ctx.lineTo(sway-wide*.34,yy+.3);
+          ctx.lineTo(sway,yy+1.3);
+          ctx.lineTo(sway+wide*.45,yy+.3);ctx.lineTo(sway+wide,yy+.5);
+          ctx.lineTo(sway,yy-7.3);ctx.fill();
+        }
+      }else if(sp===4){ // savanna acacia: crooked woody branches, flat dry crown
+        ctx.strokeStyle='#75684e';ctx.lineWidth=2;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(0,3);ctx.lineTo(1,-6);ctx.lineTo(-4,-10);
+        ctx.moveTo(1,-6);ctx.lineTo(5,-10);ctx.stroke();
+        const leaves=['#596c40','#788448','#8e9957'];
+        for(let k=0;k<3;k++){
+          ctx.fillStyle=leaves[k];
+          ctx.beginPath();ctx.ellipse((k-1)*4,-11-(k===1?2:0),
+            5.5+(k===1?2:0),2.8+(k===1?.7:0),-.07,0,Math.PI*2);ctx.fill();
+        }
       }else{
-        ctx.strokeStyle=sp===7?'#6c6356':'#927653';ctx.lineWidth=2.5;
-        ctx.beginPath();ctx.moveTo(0,3);ctx.quadraticCurveTo(sway*2,-4,sway,-9);ctx.stroke();
-        const base=sp===3?'#39a17a':sp===6?'#2e9160':sp===7?'#698270':'#4caa63';
-        ctx.fillStyle=base;ctx.beginPath();ctx.ellipse(sway-2,-10,6.5,6,0,0,Math.PI*2);ctx.fill();
-        ctx.fillStyle=sp===7?'#859482':sp===6?'#3ac47b':'#8bd775';
-        ctx.beginPath();ctx.arc(sway+2,-12,5.2,0,Math.PI*2);ctx.fill();
+        const swamp=sp===7,jungle=sp===6;
+        const bark=swamp?'#625d55':jungle?'#5f5c48':'#806c53';
+        ctx.strokeStyle=bark;ctx.lineWidth=2.5;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(0,3);
+        ctx.bezierCurveTo(-1.1,-2,1+sway,-6,sway,-11);ctx.stroke();
+        ctx.lineWidth=1.1;
+        ctx.beginPath();ctx.moveTo(.1,-5);ctx.lineTo(-5,-9);
+        ctx.moveTo(.3,-7);ctx.lineTo(5,-11);ctx.stroke();
+        const crown=swamp?['#435f53','#586d5a','#778172']:
+          jungle?['#255945','#3a7154','#558764']:
+          ['#355e42','#4b7950','#668f59'];
+        const shift=(v-.5)*1.3;
+        // Offset leaf masses and dark underside give a restrained natural canopy.
+        for(const [k,dx,dy,rx,ry] of [[0,-3,-9,5.9,4.2],
+          [1,2.8,-11,5.7,4.6],[2,-.6,-14,4.6,3.6]]){
+          ctx.fillStyle=crown[k];ctx.beginPath();
+          ctx.ellipse(dx+shift+sway,dy+shift*.5,rx,ry,(k-1)*.16,0,Math.PI*2);ctx.fill();
+        }
+        if(swamp){
+          ctx.strokeStyle='#7a8474';ctx.lineWidth=.65;
+          for(let k=0;k<3;k++){const dx=-5+k*5;
+            ctx.beginPath();ctx.moveTo(dx,-9);ctx.quadraticCurveTo(dx+1,-6,dx-.5,-4);ctx.stroke();}
+        }
+        if(jungle){
+          ctx.strokeStyle='#527357';ctx.lineWidth=.75;
+          ctx.beginPath();ctx.moveTo(-5,-11);ctx.quadraticCurveTo(-7,-3,-4,1);ctx.stroke();
+        }
       }
       ctx.restore();
     }
-    // Droplets travel down without forming flood water.
-    ctx.save();ctx.strokeStyle='rgba(156,224,255,.75)';ctx.lineWidth=1.2;
+    // Short lived watering droplets; not a standing body of flood water.
+    ctx.save();ctx.strokeStyle='rgba(152,202,226,.72)';ctx.lineWidth=1.2;
     for(const d of drops){
       if(Math.abs(d.x-view.x)>vw/(2*view.z)+20||Math.abs(d.y-view.y)>vh/(2*view.z)+20)continue;
       const progress=Math.min(1,d.t/d.life);ctx.globalAlpha=1-progress;
@@ -244,8 +295,8 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   }
   function getBiomeColor(type,x,y){
     const b=getBiome(x,y);
-    if(type===GRASS)return ['#a2d575','#e5c780','#c5af55','#edf0e5','#5bac67','#789879'][b];
-    if(type===SOIL)return ['#9c7553','#d6b47a','#b48a4e','#d2cbb6','#82644c','#71635b'][b];
+    if(type===GRASS)return ['#80ab72','#c5b277','#baaa63','#e1e9dd','#589565','#718b74'][b];
+    if(type===SOIL)return ['#977858','#c8a77c','#aa865e','#bcb4a5','#826b56','#716559'][b];
     if(type===SAND)return b===1?'#edcf83':'#ebca89';
     return null;
   }
