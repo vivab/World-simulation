@@ -76,6 +76,11 @@ global.createWorldNature=function({width:W,height:H,tile:T,terrain,onTerrainChan
   function terrainUpdated(i){
     if(!Number.isInteger(i)||i<0||i>=terrain.length)return;
     const t=terrain[i],b=biome[i];
+    // Desert and winter never become grassy or bare brown earth from watering.
+    if(t===SOIL&&(b===1||b===3)){
+      terrain[i]=b===1?SAND:SNOW;
+      onTerrainChange(i);return;
+    }
     if((t!==GRASS&&!(b===1&&t===SAND)&&!(b===3&&t===SNOW))||t===ASH)clearPlant(i);
   }
   function waterAt(cx,cy,radius=2,amount=38,animate=true){
