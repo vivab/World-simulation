@@ -1,17 +1,21 @@
-/* WorldSimulation alpha 0.6.1 — unified soil and high-zoom terrain detail. */
+/* WorldSimulation alpha 0.6.2 — crisp terrain contours, no repetitive water waves. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
   const COLORS = ['#e9b56e', '#ca98e2', '#89d4c9', '#e47e83', '#bed678'];
   const NAMES = ['Аурелия', 'Нордхейм', 'Валория', 'Элирия', 'Равенхольд', 'Соларис', 'Аркания', 'Эстерия'];
   const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река', 'Пепелище'];
-  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c', '#a98763'];
+  const PALETTE = ['#1c5475', '#347da6', '#e4bf86', '#819e6e', '#477655', '#858b86', '#d3d9da', '#dfb879', '#508fb4', '#625c58', '#a98763'];
   const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d', {alpha:false});
   const minimap = document.querySelector('#minimap'), miniCtx = minimap.getContext('2d');
   const $ = id => document.getElementById(id);
   const worldCanvas = document.createElement('canvas');
   worldCanvas.width = W*TILE; worldCanvas.height = H*TILE;
   const tctx = worldCanvas.getContext('2d');
+  // Shore strokes live on their own cache to stay sharp at any zoom.
+  const shoreCanvas=document.createElement('canvas');
+  shoreCanvas.width=W*TILE;shoreCanvas.height=H*TILE;
+  const shoreCtx=shoreCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
   let terrainDirty=false,terrainRedrawAt=0,terrainResolution=0;
   function markTerrain(index){
@@ -109,18 +113,18 @@
     for(let px=0;px<width;px++){
       const fx=(px+.5)/DETAIL_RES-.5,ix=Math.floor(fx);
       xs[px]=clamp(ix,0,W-1);xsNext[px]=clamp(ix+1,0,W-1);
-      xMix[px]=smooth(fx-ix);
+      xMix[px]=smooth(clamp((fx-ix-.27)/.46,0,1));
     }
     for(let py=0;py<height;py++){
       const fy=(py+.5)/DETAIL_RES-.5,iy=Math.floor(fy);
       const rowA=clamp(iy,0,H-1)*W,rowB=clamp(iy+1,0,H-1)*W;
-      const vy=smooth(fy-iy),invY=1-vy;
+      const vy=smooth(clamp((fy-iy-.27)/.46,0,1)),invY=1-vy;
       for(let px=0;px<width;px++){
         const x=xs[px],xN=xsNext[px],vx=xMix[px],invX=1-vx;
         const a=coloredTiles[rowA+x],b=coloredTiles[rowA+xN];
         const c=coloredTiles[rowB+x],e=coloredTiles[rowB+xN];
         const off=(py*width+px)*4;
-        const tint=(hash(px,py,state.seed+8)-.5)*9;
+        const tint=(hash(px,py,state.seed+8)-.5)*5;
         d[off]  =(a[0]*invX+b[0]*vx)*invY+(c[0]*invX+e[0]*vx)*vy+tint;
         d[off+1]=(a[1]*invX+b[1]*vx)*invY+(c[1]*invX+e[1]*vx)*vy+tint;
         d[off+2]=(a[2]*invX+b[2]*vx)*invY+(c[2]*invX+e[2]*vx)*vy+tint;
@@ -163,14 +167,48 @@
         tctx.strokeStyle='rgba(35,36,37,.28)';tctx.lineWidth=1.1;
         tctx.beginPath();tctx.moveTo(px-2,py-2);tctx.lineTo(px+1,py+2);tctx.stroke();
       }
-      if((type===1||type===8)&&sample>.67){
-        tctx.strokeStyle='rgba(206,250,255,.21)';tctx.lineWidth=1.2;tctx.lineCap='round';
-        tctx.beginPath();tctx.moveTo(px-3,py);tctx.quadraticCurveTo(px,py-2,px+3,py);tctx.stroke();
-      }
+      // No repeated painted wave symbols: calm water is defined by its coastline.
     }
-    drawMinimap();terrainDirty=false;terrainResolution=DETAIL_RES;
+    drawShoreContours();drawMinimap();terrainDirty=false;terrainResolution=DETAIL_RES;
   }
 
+
+  function isWaterTile(type){return type===0||type===1||type===8;}
+  // Antialiased marching-squares shoreline, calculated only when terrain changes.
+  // Diagonal segments replace the stair-stepped edge of square map tiles.
+  function drawShoreContours(){
+    shoreCtx.clearRect(0,0,shoreCanvas.width,shoreCanvas.height);
+    shoreCtx.save();
+    shoreCtx.scale(TILE,TILE);
+    shoreCtx.lineJoin='round';shoreCtx.lineCap='round';
+    shoreCtx.beginPath();
+    for(let y=0;y<H-1;y++)for(let x=0;x<W-1;x++){
+      const a=isWaterTile(terrain[at(x,y)]);
+      const b=isWaterTile(terrain[at(x+1,y)]);
+      const c=isWaterTile(terrain[at(x,y+1)]);
+      const d=isWaterTile(terrain[at(x+1,y+1)]);
+      const crossings=[];
+      if(a!==b)crossings.push([x+1,y+.5]);       // top
+      if(b!==d)crossings.push([x+1.5,y+1]);     // right
+      if(c!==d)crossings.push([x+1,y+1.5]);     // bottom
+      if(a!==c)crossings.push([x+.5,y+1]);      // left
+      if(crossings.length===2){
+        shoreCtx.moveTo(crossings[0][0],crossings[0][1]);
+        shoreCtx.lineTo(crossings[1][0],crossings[1][1]);
+      }else if(crossings.length===4){
+        // Saddle points: choose a stable pair of short shore sections.
+        shoreCtx.moveTo(crossings[0][0],crossings[0][1]);
+        shoreCtx.lineTo(crossings[3][0],crossings[3][1]);
+        shoreCtx.moveTo(crossings[1][0],crossings[1][1]);
+        shoreCtx.lineTo(crossings[2][0],crossings[2][1]);
+      }
+    }
+    shoreCtx.strokeStyle='rgba(31,48,49,.76)';
+    shoreCtx.lineWidth=.28;shoreCtx.stroke();
+    shoreCtx.strokeStyle='rgba(230,217,173,.88)';
+    shoreCtx.lineWidth=.105;shoreCtx.stroke();
+    shoreCtx.restore();
+  }
 
   // Draw tiny world-space features at close zoom, not an enlarged blurry image.
   // This pass only visits visible terrain. At far zoom the cached bitmap is used.
@@ -184,7 +222,6 @@
     const x1=Math.min(W,Math.ceil((camera.x+halfW)/TILE)+1);
     const y1=Math.min(H,Math.ceil((camera.y+halfH)/TILE)+1);
     const stride=z<1.6?2:1;
-    const seconds=last/1000;
     let drawn=0;
     ctx.save();ctx.globalAlpha=fade;ctx.lineCap='round';
     outer:for(let y=y0;y<y1;y+=stride)for(let x=x0;x<x1;x+=stride){
@@ -198,17 +235,18 @@
         ctx.beginPath();ctx.ellipse(dx,dy,1.55+seed*.7,.75,-.28,0,Math.PI*2);ctx.fill();
         ctx.fillStyle='rgba(238,202,158,.42)';
         ctx.beginPath();ctx.ellipse(dx-1.6,dy-1.1,.9,.42,-.3,0,Math.PI*2);ctx.fill();
-        if(seed>.56){
-          ctx.strokeStyle='rgba(83,63,45,.3)';ctx.lineWidth=.42;
-          ctx.beginPath();ctx.moveTo(ox+1,oy+6);
-          ctx.quadraticCurveTo(ox+3.1,oy+4.4,ox+4.9,oy+5.2);ctx.stroke();
+        if(seed>.78){
+          ctx.strokeStyle='rgba(79,56,42,.38)';ctx.lineWidth=.46;
+          ctx.beginPath();ctx.moveTo(ox+1,oy+5.7);ctx.lineTo(ox+2.7,oy+4.9);
+          ctx.lineTo(ox+4.1,oy+5.5);ctx.stroke();
         }
-      }else if(kind===7||kind===2){ // Fine grains and short wind-shaped sand ripples.
-        ctx.strokeStyle='rgba(142,108,63,.28)';ctx.lineWidth=.48;
-        ctx.beginPath();ctx.moveTo(ox+.8,oy+2+seed*2);
-        ctx.quadraticCurveTo(ox+3.4,oy+1+seed*2,ox+6,oy+2.6+seed*2);ctx.stroke();
-        ctx.fillStyle='rgba(255,240,190,.51)';
-        ctx.beginPath();ctx.arc(dx,dy,.55,0,Math.PI*2);ctx.fill();
+      }else if(kind===7||kind===2){ // Subtle grains, no tiled curved ripples.
+        if(seed>.38){
+          ctx.fillStyle='rgba(122,91,60,.32)';
+          ctx.fillRect(dx,dy,.85,.65);
+          ctx.fillStyle='rgba(248,227,177,.34)';
+          ctx.fillRect(dx-2.2,dy+1.1,.6,.6);
+        }
       }else if(kind===3||kind===4){ // Individual sprigs show up when approaching grass.
         if(seed>.18){
           ctx.strokeStyle='rgba(39,92,48,.53)';ctx.lineWidth=.65;
@@ -223,14 +261,6 @@
         ctx.moveTo(dx-2,dy+1);ctx.lineTo(dx-.5,dy-.8);ctx.lineTo(dx+1,dy-.6);ctx.stroke();
         if(kind===6){ctx.fillStyle='rgba(255,255,255,.63)';
           ctx.beginPath();ctx.arc(dx-1.5,dy-1.6,.66,0,Math.PI*2);ctx.fill();}
-      }else if(kind===0||kind===1||kind===8){ // Subtle moving wavelets, kept crisp.
-        if(seed>.31){
-          ctx.strokeStyle=kind===0?'rgba(149,201,222,.28)':'rgba(192,237,242,.43)';
-          ctx.lineWidth=.62;ctx.beginPath();
-          const wave=Math.sin(seconds*1.2+x*.54+y*.3)*.5;
-          ctx.moveTo(dx-1.8,dy+wave);ctx.quadraticCurveTo(dx,dy-1+wave,dx+2.1,dy+wave);
-          ctx.stroke();
-        }
       }else if(kind===9){
         ctx.strokeStyle='rgba(35,38,40,.4)';ctx.lineWidth=.65;
         ctx.beginPath();ctx.moveTo(dx-1.4,dy-1);ctx.lineTo(dx+.6,dy+.5);ctx.stroke();
@@ -502,7 +532,10 @@
     const dpr=canvas.width/viewW;
     ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#1c3a50';ctx.fillRect(0,0,viewW,viewH);
     ctx.save();ctx.translate(viewW/2,viewH/2);ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);
-    ctx.imageSmoothingEnabled=true;ctx.drawImage(worldCanvas,0,0);
+    ctx.imageSmoothingEnabled=camera.z<1.55;
+    ctx.drawImage(worldCanvas,0,0);
+    // Vector contour is not a scaled terrain bitmap; it stays sharp at any zoom.
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(shoreCanvas,0,0);
     drawCloseDetails();
     drawVolcanoes(ctx,timestamp/1000);
     elements.draw(ctx);
@@ -571,15 +604,15 @@
         ctx.moveTo(px,py);ctx.lineTo(px-length*.32,py+length);
       }
       ctx.stroke();
-      // Little concentric ripples appear where droplets meet water and soil.
-      ctx.strokeStyle='#ddf7ff';ctx.lineWidth=clamp(.8/camera.z,.6,2);
+      // A few short droplet splashes, no concentric circular wave symbols.
+      ctx.strokeStyle='#c0dce5';ctx.lineWidth=clamp(.6/camera.z,.35,1.5);
       for(let i=0;i<splashCount;i++){
         const local=(age*.85+hash(i,23,storm.seed))%1;
         const spread=hash(i,88,storm.seed),angle=hash(i,93,storm.seed)*Math.PI*2;
         const px=x+Math.cos(angle)*r*.91*spread,py=y+Math.sin(angle)*r*.91*spread;
-        ctx.globalAlpha=fade*(1-local)*.54;
-        ctx.beginPath();ctx.ellipse(px,py,clamp((1+local*5)/camera.z,1,12),
-          clamp((.3+local*1.7)/camera.z,.4,5),0,0,Math.PI*2);ctx.stroke();
+        ctx.globalAlpha=fade*(1-local)*.35;
+        ctx.beginPath();ctx.moveTo(px-1,py+.5);ctx.lineTo(px,py-1);
+        ctx.lineTo(px+1,py+.5);ctx.stroke();
       }
       ctx.restore();
     }
