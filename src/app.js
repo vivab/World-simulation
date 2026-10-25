@@ -506,8 +506,8 @@
     if(tool==='seeds'){nature.scatterSeeds(cx,cy,2);return;}
     if(tool.startsWith('biome_')){
       // A biome replaces the underlying terrain and active fire/lava as well.
-      elements.clearArea(cx,cy,3);
-      nature.paintBiome(cx,cy,tool.slice(6),3);
+      elements.clearArea(cx,cy,4);
+      nature.paintBiome(cx,cy,tool.slice(6),4);
       terrainDirty=true;return;
     }
     if(tool==='rain'){
@@ -529,7 +529,7 @@
       state.effects.push({x:cx,y:cy,life:1.4,max:1.4,radius:7,color:'#ffd17f'});
       updateStats();return;
     }
-    const radius=tool==='volcano'?5:tool==='forest'||tool==='ground'||tool==='sand'?3:2;
+    const radius=tool==='ground'||tool==='sand'?4:tool==='rock'||tool==='mountain'?3:tool==='volcano'?5:2;
     elements.paint(cx,cy,tool,radius);
     // Store only terrain changes; elemental cells are stored separately.
   }
