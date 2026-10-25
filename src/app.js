@@ -16,6 +16,8 @@
   const shoreCanvas=document.createElement('canvas');
   shoreCanvas.width=W*TILE;shoreCanvas.height=H*TILE;
   const shoreCtx=shoreCanvas.getContext('2d');
+  const shorelineMask=new Uint8Array(W*H);
+  let shoreDirty=true;
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
   let terrainDirty=false,terrainRedrawAt=0,terrainResolution=0;
   function markTerrain(index){
@@ -101,7 +103,9 @@
     const colors=PALETTE.map(c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]);
     const coloredTiles=new Array(terrain.length);
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      const i=at(x,y),color=nature.getBiomeColor(terrain[i],x,y);
+      const i=at(x,y),type=terrain[i],color=nature.getBiomeColor(type,x,y);
+      const water=(type===0||type===1||type===8)?1:0;
+      if(shorelineMask[i]!==water){shorelineMask[i]=water;shoreDirty=true;}
       if(color){
         coloredTiles[i]=[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)];
       }else coloredTiles[i]=colors[terrain[i]];
@@ -169,7 +173,8 @@
       }
       // No repeated painted wave symbols: calm water is defined by its coastline.
     }
-    drawShoreContours();drawMinimap();terrainDirty=false;terrainResolution=DETAIL_RES;
+    if(shoreDirty){drawShoreContours();shoreDirty=false;}
+    drawMinimap();terrainDirty=false;terrainResolution=DETAIL_RES;
   }
 
 
