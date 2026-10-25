@@ -9,7 +9,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
  function place(x,y,t,p=7){if(!inside(x,y))return;const i=at(x,y);
    if(t===2&&(terrain[i]<2||terrain[i]>=5))return;
    if(t===1&&terrain[i]<2)return;
-   if(t===4&&terrain[i]<2){terrain[i]=5;changed();}
+   if(t===4&&terrain[i]<2){terrain[i]=5;changed(i);}
    A[i]=t;P[i]=Math.max(P[i],p);dirty=true;
  }
  function paint(x,y,kind,radius=2){
@@ -20,7 +20,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
      const i=at(x+dx,y+dy),was=terrain[i];
      let to={ground:3,sand:7,rock:5,mountain:6,forest:4}[kind];
      if(kind==='volcano'){to=d<8?5:undefined;if(d<13)place(x+dx,y+dy,4,9);}
-     if(to!==undefined){if(was!==to){terrain[i]=to;changed();}if(A[i]&&kind!=='volcano'){A[i]=P[i]=0;dirty=true;}}
+     if(to!==undefined){if(was!==to){terrain[i]=to;changed(i);}if(A[i]&&kind!=='volcano'){A[i]=P[i]=0;dirty=true;}}
      else if(kind==='water')place(x+dx,y+dy,1);
      else if(kind==='fire')place(x+dx,y+dy,2);
      else if(kind==='acid')place(x+dx,y+dy,3);
@@ -50,7 +50,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
      let best=-1,h=altitude[i]+.006;
      for(const j of adj){
        if(A[j]===2){B[j]=Q[j]=0;dirty=true;}
-       if(A[j]===4){B[j]=Q[j]=0;B[i]=Q[i]=0;terrain[j]=5;changed();dirty=true;break;}
+       if(A[j]===4){B[j]=Q[j]=0;B[i]=Q[i]=0;terrain[j]=5;changed(j);dirty=true;break;}
        if(terrain[j]<2||A[j]===3||A[j]===4||B[j]===2)continue;
        if(B[j]===1&&Q[j]>=p-1)continue;
        const val=altitude[j]+(B[j]===1?Q[j]*.002:0);
@@ -60,7 +60,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
      if(Math.random()<.03){Q[i]=Math.max(0,Q[i]-1);dirty=true;}
    }else if(t===2){
      if(adj.some(j=>A[j]===1)){B[i]=Q[i]=0;dirty=true;continue;}
-     if(terrain[i]===4&&Math.random()<.16){terrain[i]=3;changed();}
+     if(terrain[i]===4&&Math.random()<.16){terrain[i]=3;changed(i);}
      for(const j of adj){
        if(A[j]||B[j])continue;
        if((terrain[j]===4||terrain[j]===3||terrain[j]===7)
@@ -70,10 +70,10 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
    }else{
      for(const j of adj){
        if(A[j]===1){B[i]=Q[i]=0;B[j]=Q[j]=0;dirty=true;
-         if(t===4){terrain[i]=5;changed();}break;}
+         if(t===4){terrain[i]=5;changed(i);}break;}
        if(t===3&&(terrain[j]===4||terrain[j]===5||terrain[j]===6)&&Math.random()<.10){
-         terrain[j]=terrain[j]===4?3:7;changed();}
-       if(t===4&&terrain[j]===4&&Math.random()<.23){terrain[j]=3;changed();
+         terrain[j]=terrain[j]===4?3:7;changed(j);}
+       if(t===4&&terrain[j]===4&&Math.random()<.23){terrain[j]=3;changed(j);
          if(!B[j]){B[j]=2;Q[j]=5;}}
        if(terrain[j]>=2&&!B[j]&&p>2&&altitude[j]<=altitude[i]+.03
           &&Math.random()<(t===4?.11:.25)){
@@ -81,7 +81,7 @@ g.createWorldElements=function({width:W,height:H,tile:T,terrain,altitude,onTerra
        }
      }
      if(Math.random()<(t===4?.065:.14)){Q[i]=Math.max(0,Q[i]-1);
-       if(t===4&&!Q[i]&&terrain[i]>=2){terrain[i]=5;changed();}dirty=true;}
+       if(t===4&&!Q[i]&&terrain[i]>=2){terrain[i]=5;changed(i);}dirty=true;}
    }
   }
   for(let i=0;i<A.length;i++)if(!Q[i])B[i]=0;
