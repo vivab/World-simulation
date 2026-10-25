@@ -1,11 +1,11 @@
-/* WorldSimulation alpha 0.4 — smooth illustrated landscape and living nature. */
+/* WorldSimulation alpha 0.5 — soil moisture, living biomes and gradual tree growth. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
   const COLORS = ['#e9b56e', '#ca98e2', '#89d4c9', '#e47e83', '#bed678'];
   const NAMES = ['Аурелия', 'Нордхейм', 'Валория', 'Элирия', 'Равенхольд', 'Соларис', 'Аркания', 'Эстерия'];
   const BIOME = ['Глубокий океан', 'Море', 'Пляж', 'Луг', 'Лес', 'Горы', 'Снежные горы', 'Пустыня', 'Река', 'Пепелище'];
-  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c'];
+  const PALETTE = ['#2878ac', '#58b0d0', '#f3d793', '#a6d67e', '#64b870', '#a3a19b', '#e6e5e5', '#efc77e', '#79cce6', '#72655c', '#a17a55'];
   const canvas = document.querySelector('#world'), ctx = canvas.getContext('2d', {alpha:false});
   const minimap = document.querySelector('#minimap'), miniCtx = minimap.getContext('2d');
   const $ = id => document.getElementById(id);
@@ -14,9 +14,18 @@
   const tctx = worldCanvas.getContext('2d');
   const terrain = new Uint8Array(W*H), altitude = new Float32Array(W*H);
   let terrainDirty=false,terrainRedrawAt=0;
+  function markTerrain(index){
+    terrainDirty=true;
+    if(Number.isInteger(index)&&index>=0&&index<terrain.length){
+      state.changes[index]=terrain[index];nature.terrainUpdated(index);
+    }
+  }
+  const nature=window.createWorldNature({width:W,height:H,tile:TILE,terrain,
+    onTerrainChange:markTerrain,onWater:(x,y)=>elements.extinguish(x,y)});
   const elements=window.createWorldElements({width:W,height:H,tile:TILE,terrain,altitude,
-    onTerrainChange:(index)=>{terrainDirty=true;if(Number.isInteger(index))state.changes[index]=terrain[index];}});
-  const PAINT_TOOLS=new Set(['ground','forest','sand','rock','mountain','water','fire','acid','lava','rain','meteor']);
+    onTerrainChange:markTerrain,getPlant:(x,y)=>nature.getPlant(x,y)});
+  const PAINT_TOOLS=new Set(['ground','sand','rock','mountain','water','seeds','fire','acid','lava','rain','meteor',
+    'biome_normal','biome_desert','biome_savanna','biome_winter','biome_jungle','biome_swamp']);
   let activeCategory='world',lastBrushCell='',lastRainSpot=null;
   const camera = {x:0,y:0,z:1};
   // Rendered camera follows the target instead of snapping to touch input.
@@ -66,7 +75,7 @@
         if(!best||bestValue>altitude[i]+.012)break;[x,y]=best;
       }
     }
-    elements.reset();drawTerrain();
+    elements.reset();nature.initialize(seed);drawTerrain();
   }
   function drawTerrain(){
     // Small blended texture -> full sized cached illustration; no hard pixels.
@@ -75,11 +84,18 @@
     const lc=low.getContext('2d');
     const img=lc.createImageData(width,height),d=img.data;
     const colors=PALETTE.map(c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]);
+    const coloredTiles=new Array(terrain.length);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const i=at(x,y),color=nature.getBiomeColor(terrain[i],x,y);
+      if(color){
+        coloredTiles[i]=[parseInt(color.slice(1,3),16),parseInt(color.slice(3,5),16),parseInt(color.slice(5,7),16)];
+      }else coloredTiles[i]=colors[terrain[i]];
+    }
     for(let py=0;py<height;py++)for(let px=0;px<width;px++){
       const sx=(px+.5)/2-.5,sy=(py+.5)/2-.5;
       const x0=Math.floor(sx),y0=Math.floor(sy);
       const fx=smooth(sx-x0),fy=smooth(sy-y0);
-      const sample=(x,y)=>colors[terrain[at(clamp(x,0,W-1),clamp(y,0,H-1))]];
+      const sample=(x,y)=>coloredTiles[at(clamp(x,0,W-1),clamp(y,0,H-1))];
       const a=sample(x0,y0),b=sample(x0+1,y0),c=sample(x0,y0+1),e=sample(x0+1,y0+1);
       const base=(py*width+px)*4;
       const tint=(hash(px,py,state.seed+8)-.5)*9;
@@ -106,7 +122,7 @@
         tctx.fillStyle='#338856';tctx.beginPath();tctx.arc(px-1.8,py-.7,size*.68,0,Math.PI*2);tctx.fill();
         tctx.fillStyle='#51ac64';tctx.beginPath();tctx.arc(px+1.6,py-2.2,size*.79,0,Math.PI*2);tctx.fill();
         tctx.fillStyle='#8bce78';tctx.beginPath();tctx.arc(px-.5,py-3.6,size*.47,0,Math.PI*2);tctx.fill();
-      }else if((type===3||type===7)&&sample>.88){
+      }else if((type===3||type===7||type===10)&&sample>.88){
         tctx.strokeStyle=type===3?'rgba(63,136,67,.45)':'rgba(152,116,63,.28)';
         tctx.lineWidth=.85;tctx.lineCap='round';tctx.beginPath();
         tctx.moveTo(px-2,py+2);tctx.quadraticCurveTo(px-2.5,py-1,px-4,py-2.6);
@@ -382,7 +398,10 @@
       state.effects=state.effects.filter(e=>(e.life-=dt)>0);
       if(!state.paused)state.weatherTime+=dt;
       state.storms=state.storms.filter(storm=>state.weatherTime-storm.start<storm.duration);
-      if(!state.paused)updateHouses(elements.step(dt*state.speed,state.storms));
+      if(!state.paused){
+        nature.step(dt*state.speed,state.storms);
+        updateHouses(elements.step(dt*state.speed,state.storms));
+      }
     }
     if(terrainDirty&&timestamp-terrainRedrawAt>180){drawTerrain();terrainRedrawAt=timestamp;}
     const dpr=canvas.width/viewW;
@@ -391,6 +410,7 @@
     ctx.imageSmoothingEnabled=true;ctx.drawImage(worldCanvas,0,0);
     drawVolcanoes(ctx,timestamp/1000);
     elements.draw(ctx);
+    nature.drawPlants(ctx,camera,viewW,viewH,timestamp/1000);
     for(const c of state.cities){
       const x=c.x*TILE+4,y=c.y*TILE+4;
       if(Math.abs(x-camera.x)>viewW/camera.z/2+100||Math.abs(y-camera.y)>viewH/camera.z/2+100)continue;
@@ -471,6 +491,11 @@
 
   function modifyTerrain(cx,cy,tool){
     if(cx<0||cy<0||cx>=W||cy>=H)return;
+    if(tool==='water'){nature.waterAt(cx,cy,2,39,true);return;}
+    if(tool==='seeds'){nature.scatterSeeds(cx,cy,2);return;}
+    if(tool.startsWith('biome_')){
+      nature.paintBiome(cx,cy,tool.slice(6),3);terrainDirty=true;return;
+    }
     if(tool==='rain'){
       const radius=11;
       state.storms.push({x:cx*TILE+4,y:cy*TILE+4,radius:radius*TILE,
@@ -517,7 +542,8 @@
     }
     const nearest=state.cities.find(c=>Math.hypot(c.x-x,c.y-y)<6);
     if(nearest){setInfo(nearest.name,`Население: ${nearest.pop} · Пища: ${nearest.food} · Основано: ${state.year-nearest.age} год.`);}
-    else setInfo(BIOME[terrainType],`Участок ${x}:${y}. Высота: ${Math.round(altitude[at(x,y)]*100)}%.`);
+    else setInfo(nature.BIOMES[nature.getBiome(x,y)]||BIOME[terrainType],
+      `Участок ${x}:${y} · ${BIOME[terrainType]||'Почва'} · Влажность ${nature.getMoisture(x,y)} · Высота ${Math.round(altitude[at(x,y)]*100)}%.`);
   }
   function selectCategory(category){
     activeCategory=category;
@@ -535,18 +561,22 @@
   function setTool(tool){
     state.tool=tool;lastBrushCell='';lastRainSpot=null;
     document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('active',el.dataset.tool===tool));
-    const labels={look:'Перемещение и масштаб',inspect:'Осмотреть мир',
-      ground:'Рисуй землю пальцем',forest:'Рисуй лес пальцем',sand:'Песок',rock:'Камни',
-      mountain:'Заснеженные горы',water:'Вода растекается и тушит огонь',
-      rain:'Можно создавать сколько угодно дождей',fire:'Огонь распространяется по растениям',
-      acid:'Кислота разрушает камни и растения',lava:'Горячая лава течёт и остывает',
-      volcano:'Нажми один раз: маленький вулкан будет извергать лаву',meteor:'Падение метеорита',
-      village:'Коснись суши для основания'};
+    const labels={look:'Перемещение и масштаб',inspect:'Осмотреть почву и биом',
+      ground:'Коричневая почва · полей для травы',sand:'Сухой песок',rock:'Камни',
+      mountain:'Заснеженные горы',water:'Капли воды увлажняют почву — без затоплений',
+      seeds:'Семена на траве вырастут в деревья',rain:'Дождь ускоряет рост травы',
+      fire:'Огонь сжигает траву, деревья и дома',
+      acid:'Кислота разрушает поверхность',lava:'Лава течёт и остывает',
+      volcano:'Мини-вулкан с извержением',meteor:'Метеорит',
+      village:'Основание поселения',
+      biome_normal:'Луга и дубы',biome_desert:'Песок, кактусы и пальмы',
+      biome_savanna:'Жёлтая саванна и акации',biome_winter:'Снег и ели',
+      biome_jungle:'Джунгли и тропические деревья',biome_swamp:'Болота и кривые деревья'};
     $('toolDescription').textContent=labels[tool]||tool;
     canvas.style.cursor=tool==='look'?'grab':'crosshair';
   }
   function save(silent=false){
-    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes,elements:elements.serialize(),volcanoes:elements.getVolcanoes().map(v=>({...v}))};
+    try {const data={v:1,seed:state.seed,year:state.year,cities:state.cities,units:state.units,changes:state.changes,nature:nature.serialize(),elements:elements.serialize(),volcanoes:elements.getVolcanoes().map(v=>({...v}))};
       localStorage.setItem(SAVE_KEY,JSON.stringify(data));if(!silent)toast('Мир сохранён на этом устройстве');return true;
     }catch(e){if(!silent)toast('Не удалось сохранить мир в браузере');return false;}
   }
@@ -556,7 +586,7 @@
       generate(data.seed);state.year=Math.max(1,data.year||1);
       state.changes=data.changes||{};
       for(const [key,val] of Object.entries(state.changes)){const n=Number(key);if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length)terrain[n]=val;}
-      drawTerrain();elements.restore(data.elements);elements.restoreVolcanoes(data.volcanoes);state.cities=data.cities.slice(0,22);for(const c of state.cities)ensureHouses(c);state.units=data.units.slice(0,600);state.ready=true;updateStats();
+      nature.restore(data.nature);drawTerrain();elements.restore(data.elements);elements.restoreVolcanoes(data.volcanoes);state.cities=data.cities.slice(0,22);for(const c of state.cities)ensureHouses(c);state.units=data.units.slice(0,600);state.ready=true;updateStats();
       const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}syncCamera();return true;
     }catch(e){return false;}
   }
