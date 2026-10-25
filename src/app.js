@@ -1,4 +1,4 @@
-/* WorldSimulation alpha 0.5 — soil moisture, living biomes and gradual tree growth. */
+/* WorldSimulation alpha 0.6 — unrestricted terraforming and grounded natural foliage. */
 (() => {
   'use strict';
   const W = 224, H = 144, TILE = 8, SAVE_KEY = 'worldsimulation-save-v1';
@@ -17,7 +17,16 @@
   function markTerrain(index){
     terrainDirty=true;
     if(Number.isInteger(index)&&index>=0&&index<terrain.length){
-      state.changes[index]=terrain[index];nature.terrainUpdated(index);
+      const tile=terrain[index];
+      state.changes[index]=tile;
+      // Keep simulation height in sync with edited surface. Reclaimed ocean
+      // and mountain tiles must become normal walkable ground, not stay deep/high.
+      if(tile===0)altitude[index]=.20;
+      else if(tile===1||tile===8)altitude[index]=.40;
+      else if(tile===5)altitude[index]=.71;
+      else if(tile===6)altitude[index]=.82;
+      else if(tile>=2)altitude[index]=.55;
+      nature.terrainUpdated(index);
     }
   }
   const nature=window.createWorldNature({width:W,height:H,tile:TILE,terrain,
@@ -494,7 +503,10 @@
     if(tool==='water'){nature.waterAt(cx,cy,2,39,true);return;}
     if(tool==='seeds'){nature.scatterSeeds(cx,cy,2);return;}
     if(tool.startsWith('biome_')){
-      nature.paintBiome(cx,cy,tool.slice(6),3);terrainDirty=true;return;
+      // A biome replaces the underlying terrain and active fire/lava as well.
+      elements.clearArea(cx,cy,3);
+      nature.paintBiome(cx,cy,tool.slice(6),3);
+      terrainDirty=true;return;
     }
     if(tool==='rain'){
       const radius=11;
@@ -585,7 +597,17 @@
       const data=JSON.parse(text);if(data.v!==1||!Number.isInteger(data.seed)||!Array.isArray(data.cities)||!Array.isArray(data.units))return false;
       generate(data.seed);state.year=Math.max(1,data.year||1);
       state.changes=data.changes||{};
-      for(const [key,val] of Object.entries(state.changes)){const n=Number(key);if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length)terrain[n]=val;}
+      for(const [key,val] of Object.entries(state.changes)){
+        const n=Number(key);
+        if(n>=0&&n<terrain.length&&Number.isInteger(val)&&val>=0&&val<PALETTE.length){
+          terrain[n]=val;
+          if(val===0)altitude[n]=.20;
+          else if(val===1||val===8)altitude[n]=.40;
+          else if(val===5)altitude[n]=.71;
+          else if(val===6)altitude[n]=.82;
+          else altitude[n]=.55;
+        }
+      }
       nature.restore(data.nature);drawTerrain();elements.restore(data.elements);elements.restoreVolcanoes(data.volcanoes);state.cities=data.cities.slice(0,22);for(const c of state.cities)ensureHouses(c);state.units=data.units.slice(0,600);state.ready=true;updateStats();
       const first=state.cities[0];if(first){targetCamera.x=first.x*TILE;targetCamera.y=first.y*TILE;}syncCamera();return true;
     }catch(e){return false;}
