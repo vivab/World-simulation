@@ -22,6 +22,7 @@ canvas{display:block;width:100%;height:100%}
 #heading small{display:block;font:700 10px system-ui,sans-serif;letter-spacing:3px;color:#e4d6be}
 #hint{position:absolute;left:50%;bottom:15px;transform:translateX(-50%);text-align:center;min-width:280px;max-width:95vw}
 #hint>div:last-child{padding:8px 12px;background:#1e1e24d9;border:1px solid #9a856d;font:700 12px/1.6 system-ui,sans-serif}
+#reticle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff9;pointer-events:none;font:bold 23px monospace;text-shadow:1px 1px #000}
 #notice{min-height:40px;font-size:clamp(16px,2.9vw,26px);color:#ffe19a;letter-spacing:1px;text-shadow:2px 3px #000}
 #pickup{display:none;position:absolute;top:70%;left:50%;transform:translate(-50%,-50%);font:700 13px system-ui,sans-serif;background:#231e1be3;border:1px solid #b9a88e;padding:7px 11px;white-space:nowrap}
 #flash{position:absolute;inset:0;background:#cf1e36;opacity:0}
@@ -51,8 +52,8 @@ button:active{transform:translate(2px,2px);box-shadow:1px 1px #050405}
  </div>
  <div id="heading">BACKYARD BRAWL<small>UNDERGROUND FIGHT CLUB</small></div>
  <button id="sound" aria-label="Звук">♪</button>
- <div id="pickup"></div>
- <div id="hint"><div id="notice"></div><div>WASD / СТРЕЛКИ — ДВИЖЕНИЕ · SPACE — УДАР / НОГА · E — БРОСОК · F — ПОДОБРАТЬ · R — РЕВАНШ</div></div>
+ <div id="pickup"></div><div id="reticle">+</div>
+ <div id="hint"><div id="notice"></div><div>WASD / СТРЕЛКИ — ХОДИТЬ · МЫШЬ — СМОТРЕТЬ · SPACE — УДАР · E — БРОСОК · F — ПРЕДМЕТ · R — РЕВАНШ</div></div>
  <div id="mobile"><div id="stickBase"><div id="stick"></div></div><div id="buttons"><button id="hit">УДАР</button><button id="throw">БРОСОК</button><button id="pick">ВЗЯТЬ</button><button id="restart">ЗАНОВО</button></div></div>
  <div id="end"><div class="panel"><h1 id="result">K.O.</h1><p id="detail">Конец боя</p><button id="again">РЕВАНШ / R</button></div></div>
 </div>
@@ -185,9 +186,57 @@ function fighter(player){
  }
  const held=new THREE.Group();held.position.set(0,-.64,-.07);arms[1].lower.add(held);
  return {root,body,head,shirt,arms,legs,held,bruise,player,hp:100,weapon:"fist",velocity:new THREE.Vector3(),
- yaw:0,walk:0,walking:0,attack:null,cooldown:0,stun:0,flash:0,dead:false,combo:0,bruises:0,aiTime:0,side:1};
+ yaw:0,walk:0,walking:0,attack:null,cooldown:0,stun:0,knockTime:0,flash:0,dead:false,combo:0,bruises:0,aiTime:0,side:1};
 }
 const player=fighter(true),bot=fighter(false);
+player.root.visible=false;
+scene.add(camera);
+const fp=new THREE.Group();camera.add(fp);
+function arm(side){
+ const g=new THREE.Group();fp.add(g);
+ const sleeve=material(0x547a8a),skin=material(0xb68b70);
+ box(g,.25,.27,.62,sleeve,side*.09,-.08,.15);
+ box(g,.22,.23,.4,skin,side*.05,-.06,-.29);
+ box(g,.27,.23,.29,skin,0,-.04,-.55);
+ return g;
+}
+const leftArm=arm(-1),rightArm=arm(1),viewWeapon=new THREE.Group();
+rightArm.add(viewWeapon);
+function refreshWeapon(){
+ viewWeapon.clear();
+ if(player.weapon==="fist")return;
+ const w=weaponMesh(player.weapon);
+ w.rotation.x=-Math.PI/2;w.rotation.z=-.14;w.position.set(0,0,-.53);
+ w.scale.setScalar(player.weapon==="chair"?.55:.85);
+ viewWeapon.add(w);
+}
+function renderArms(){
+ const a=player.attack,t=a?Math.sin(Math.PI*clamp(a.t/a.duration,0,1)):0;
+ const bob=Math.sin(player.walk*2)*player.walking*.016;
+ leftArm.position.set(-.38,-.43+bob,-.86);rightArm.position.set(.38,-.43-bob,-.86);
+ leftArm.rotation.set(0,0,0);rightArm.rotation.set(0,0,0);
+ if(a){
+  if(a.style==="throw"){leftArm.position.z-=t*.7;rightArm.position.z-=t*.7}
+  else if(a.style==="kick"){leftArm.position.y-=t*.15;rightArm.position.y-=t*.15}
+  else{rightArm.position.z-=t*.75;rightArm.rotation.x=-t*.23}
+ }
+ if(player.knockTime>0){leftArm.position.y-=.17;rightArm.position.y-=.17}
+}
+let pitch=0;
+function look(dx,dy){if(player.dead)return;player.yaw-=dx*.003;pitch=clamp(pitch-dy*.0021,-.78,.78)}
+renderer.domElement.addEventListener("click",()=>{if(matchMedia("(pointer:fine)").matches&&document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock?.()});
+document.addEventListener("mousemove",e=>{if(document.pointerLockElement===renderer.domElement)look(e.movementX,e.movementY)});
+let lookId=null,lastX=0,lastY=0;
+renderer.domElement.addEventListener("pointerdown",e=>{
+ if(e.pointerType==="mouse"||e.clientX<innerWidth*.38)return;
+ lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;
+ renderer.domElement.setPointerCapture?.(lookId);
+});
+renderer.domElement.addEventListener("pointermove",e=>{
+ if(e.pointerId!==lookId)return;
+ look(e.clientX-lastX,e.clientY-lastY);lastX=e.clientX;lastY=e.clientY;
+});
+for(const ev of ["pointerup","pointercancel"])renderer.domElement.addEventListener(ev,e=>{if(e.pointerId===lookId)lookId=null});
 function setWeapon(f,type){
  f.weapon=type;f.held.clear();
  if(type!=="fist"){const w=weaponMesh(type);w.rotation.z=Math.PI/2;w.rotation.x=-.3;
@@ -214,7 +263,7 @@ function pick(f){
  scene.remove(item.mesh);pickups.splice(pickups.indexOf(item),1);
  if(f.weapon!=="fist")drop(f.weapon,f.root.position.x+.7,f.root.position.z+.7);
  setWeapon(f,item.type);
- if(f.player){note("ПОДОБРАНО: "+weaponStats[item.type].name);hud()}
+ if(f.player){refreshWeapon();note("ПОДОБРАНО: "+weaponStats[item.type].name);hud()}
  sound(300,.1,"sine");
 }
 function stain(x,z,size){
@@ -270,6 +319,12 @@ function damage(v,a,amount,push,big){
  if(dir.lengthSq()<.001)dir.set(1,0,0);dir.normalize();
  v.velocity.addScaledVector(dir,push);
  v.stun=big?.7:.32;v.flash=.2;v.bruises++;
+ const chance=big?1:amount>=22?.5:amount>=14?.35:.22;
+ if(v.hp>0&&v.knockTime<=0&&Math.random()<chance){
+  v.knockTime=2.2;v.stun=Math.max(v.stun,2.6);v.attack=null;
+  if(v.player)note("ТЕБЯ СБИЛИ С НОГ!");
+  else if(a.player)note("ПРОТИВНИК УПАЛ!");
+ }
  v.bruise[Math.min(v.bruises-1,v.bruise.length-1)].visible=true;
  v.head.rotation.z=rnd(-.35,.35);
  splash(v.root.position.clone().add(new THREE.Vector3(0,rnd(1.3,2.3),0)),big);
@@ -319,7 +374,7 @@ function attackUpdate(f,t,dt){
    if(isThrow&&f.player)note("СИЛОВОЙ БРОСОК!");
    if(f.weapon==="bottle"&&!isThrow){
     shards(t.root.position.clone().add(new THREE.Vector3(0,1.45,0)));
-    setWeapon(f,"fist");if(f.player){note("БУТЫЛКА РАЗБИТА");hud()}
+    setWeapon(f,"fist");if(f.player){refreshWeapon();note("БУТЫЛКА РАЗБИТА");hud()}
    }
   }else sound(82,.08,"sine");
  }
@@ -350,7 +405,6 @@ function move(f,x,z,dt){
   const sp=(f.player?5.55:4.05)*(f.weapon==="chair"?.76:1);
   f.root.position.x+=x/d*sp*dt;f.root.position.z+=z/d*sp*dt;
   f.walk+=sp*dt*2.3;f.walking=clamp(f.walking+dt*7,0,1);
-  if(f.player)f.yaw=Math.atan2(-x,-z);
  }else f.walking=clamp(f.walking-dt*7,0,1);
  f.root.position.addScaledVector(f.velocity,dt);
  f.velocity.multiplyScalar(Math.exp(-7*dt));
@@ -359,7 +413,7 @@ function move(f,x,z,dt){
  f.root.rotation.y+=diff*Math.min(1,dt*13);
 }
 function animate(f,dt){
- f.cooldown=Math.max(0,f.cooldown-dt);f.stun=Math.max(0,f.stun-dt);f.flash=Math.max(0,f.flash-dt);
+ f.cooldown=Math.max(0,f.cooldown-dt);f.stun=Math.max(0,f.stun-dt);f.flash=Math.max(0,f.flash-dt);f.knockTime=Math.max(0,f.knockTime-dt);
  const step=Math.sin(f.walk)*f.walking;
  f.legs[0].hip.rotation.x=step*.57;f.legs[1].hip.rotation.x=-step*.57;
  f.legs[0].knee.rotation.x=Math.max(0,-step)*.45;f.legs[1].knee.rotation.x=Math.max(0,step)*.45;
@@ -374,10 +428,13 @@ function animate(f,dt){
  }else{f.body.rotation.x=mix(f.body.rotation.x,0,Math.min(1,dt*9));f.body.rotation.y=mix(f.body.rotation.y,0,Math.min(1,dt*9))}
  f.head.rotation.z=mix(f.head.rotation.z,0,Math.min(1,dt*6));
  f.body.position.y=1.66+Math.abs(step)*.04-(f.stun>0?.2:0);
- if(f.dead){
-  f.root.rotation.z=mix(f.root.rotation.z,f.player?-1.45:1.45,Math.min(1,dt*4));
-  f.root.position.y=mix(f.root.position.y,-.58,Math.min(1,dt*4));
- }else f.root.rotation.z=mix(f.root.rotation.z,0,Math.min(1,dt*8));
+ if(f.dead||f.knockTime>0){
+  f.root.rotation.z=mix(f.root.rotation.z,f.player?-1.45:1.45,Math.min(1,dt*8));
+  f.root.position.y=mix(f.root.position.y,-.1,Math.min(1,dt*8));
+ }else{
+  f.root.rotation.z=mix(f.root.rotation.z,0,Math.min(1,dt*4));
+  f.root.position.y=mix(f.root.position.y,0,Math.min(1,dt*4));
+ }
  f.shirt.emissive.setHex(f.flash>0?0x581020:0);
 }
 const pressed=new Set();
@@ -412,27 +469,12 @@ $("restart").addEventListener("pointerdown",e=>{e.preventDefault();reset()});
 $("again").addEventListener("click",reset);
 document.addEventListener("contextmenu",e=>e.preventDefault());
 function ai(dt){
- if(bot.dead||player.dead)return;
- const dx=player.root.position.x-bot.root.position.x,dz=player.root.position.z-bot.root.position.z;
- const dist=Math.max(.001,Math.hypot(dx,dz));
- face(bot,player);
- bot.aiTime-=dt;
- if(bot.aiTime<=0){bot.aiTime=rnd(.6,1.4);bot.side=Math.random()>.5?1:-1}
- let x=0,z=0;
- if(bot.stun<=0){
-  if(dist>1.9){x=dx/dist;z=dz/dist}
-  else if(dist<1.2){x=-dx/dist*.5;z=-dz/dist*.5}
-  else{x=-dz/dist*.25*bot.side;z=dx/dist*.25*bot.side}
-  for(const b of solids){
-   const nx=bot.root.position.x+x*1.6,nz=bot.root.position.z+z*1.6;
-   if(Math.abs(nx-b.x)<b.w+.8&&Math.abs(nz-b.z)<b.d+.8){
-    const oldX=x;x+=-z*bot.side*.95;z+=oldX*bot.side*.95;
-   }
-  }
+ if(!bot.dead&&!player.dead){
+  face(bot,player);
+  if(bot.root.position.distanceTo(player.root.position)<2.2&&bot.cooldown<=0&&bot.stun<=0)
+   attack(bot,Math.random()<.12?"throw":"hit");
  }
- if(bot.weapon==="fist"&&dist>5&&Math.random()<dt*.5&&closest(bot))pick(bot);
- if(dist<2.25&&bot.cooldown<=0&&bot.stun<=0)attack(bot,Math.random()<.13?"throw":"hit");
- move(bot,x,z,dt);
+ move(bot,0,0,dt);
 }
 function updateParticles(dt){
  for(let i=particles.length-1;i>=0;i--){
@@ -451,7 +493,9 @@ function update(dt){
  if(!player.dead){
   const x=(pressed.has("KeyD")||pressed.has("ArrowRight")?1:0)-(pressed.has("KeyA")||pressed.has("ArrowLeft")?1:0)+touchX;
   const z=(pressed.has("KeyS")||pressed.has("ArrowDown")?1:0)-(pressed.has("KeyW")||pressed.has("ArrowUp")?1:0)+touchZ;
-  move(player,x,z,dt);
+  const wx=Math.cos(player.yaw)*x+Math.sin(player.yaw)*z;
+  const wz=-Math.sin(player.yaw)*x+Math.cos(player.yaw)*z;
+  move(player,wx,wz,dt);
  }
  ai(dt);
  if(!player.dead&&!bot.dead){
@@ -463,16 +507,19 @@ function update(dt){
    bot.root.position.addScaledVector(diff,(1.08-distance)*.5);
   }
  }
- animate(player,dt);animate(bot,dt);updateParticles(dt);
+ animate(player,dt);animate(bot,dt);renderArms();updateParticles(dt);
  const near=closest(player);$("pickup").style.display=near&&!player.dead?"block":"none";
  if(near)$("pickup").textContent="F / ВЗЯТЬ — "+weaponStats[near.type].name;
  if(noteTime>0){noteTime-=dt;if(noteTime<=0)$("notice").textContent=""}
  $("flash").style.opacity=String(Math.max(0,Number($("flash").style.opacity||0)-dt*.85));
  red.intensity=28+Math.sin(time*3.8)*3;blue.intensity=23+Math.cos(time*2)*2;
  for(const p of pickups){p.t+=dt;p.mesh.rotation.y+=dt*.45;p.mesh.position.y=.2+Math.sin(p.t*2)*.07}
- const c=player.root.position,target=new THREE.Vector3(c.x*.73,12.5,c.z+15.5);
- if(shake>0){target.x+=rnd(-shake,shake)*.16;target.y+=rnd(-shake,shake)*.16;shake=Math.max(0,shake-dt*1.8)}
- camera.position.lerp(target,Math.min(1,dt*4));camera.lookAt(c.x*.85,1.4,c.z-2.6);
+ player.root.updateMatrixWorld(true);
+ const eye=player.head.localToWorld(new THREE.Vector3(0,.04,-.45));
+ if(shake>0){eye.x+=rnd(-shake,shake)*.17;eye.y+=rnd(-shake,shake)*.17;shake=Math.max(0,shake-dt*1.8)}
+ camera.position.lerp(eye,Math.min(1,dt*17));
+ camera.lookAt(camera.position.clone().add(new THREE.Vector3(-Math.sin(player.yaw),Math.tan(pitch),-Math.cos(player.yaw))));
+ if(player.dead||player.knockTime>0)camera.rotateZ(-.25);
 }
 function reset(){
  $("end").style.display="none";
@@ -481,13 +528,13 @@ function reset(){
  for(const p of pickups)scene.remove(p.mesh);pickups.length=0;
  for(const [f,x,z,yaw] of [[player,-2,7,0],[bot,2,-5,Math.PI]]){
   f.root.position.set(x,0,z);f.root.rotation.set(0,yaw,0);f.yaw=yaw;
-  f.velocity.set(0,0,0);f.hp=100;f.dead=false;f.stun=0;f.attack=null;f.cooldown=0;
+  f.velocity.set(0,0,0);f.hp=100;f.dead=false;f.stun=0;f.knockTime=0;f.attack=null;f.cooldown=0;
   f.walk=0;f.walking=0;f.bruises=0;f.combo=0;f.flash=0;f.aiTime=0;
   f.body.rotation.set(0,0,0);f.head.rotation.set(0,0,0);f.shirt.emissive.setHex(0);
   f.bruise.forEach(x=>x.visible=false);setWeapon(f,"fist");
  }
  for(const [type,x,z] of initialPickups)drop(type,x,z);
- shake=0;camera.position.set(0,13,22);note("FIGHT!",1.6);hud();
+ pitch=0;shake=0;refreshWeapon();camera.position.set(-2,2.4,7);note("FIGHT!",1.6);hud();
 }
 function loop(){
  requestAnimationFrame(loop);
