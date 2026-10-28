@@ -246,21 +246,49 @@ function paintContusion(surface,u,v,stage=1,tone="pink",bleeding=false){
   }
  }
  if(bleeding){
-  const width=rnd(1.2,2.9),length=rnd(12,28)*(stage>3?1.22:1);
-  for(let i=0;i<(stage>=4?2:1);i++){
+  const width=rnd(1.7,4),length=rnd(18,36)*(stage>3?1.28:1);
+  for(let i=0;i<(stage>=4?3:2);i++){
    const x=rnd(-radius*.22,radius*.22),y=rnd(-radius*.15,radius*.2);
    c.beginPath();c.moveTo(x,y);
    c.bezierCurveTo(x+rnd(-2,3),y+length*.32,x+rnd(-4,4),y+length*.7,x+rnd(-3,4),y+length);
    c.lineWidth=width*(i===0?1:.65);c.lineCap="round";
-   c.strokeStyle=i===0?"rgba(95,13,21,.72)":"rgba(126,24,30,.50)";c.stroke();
+   c.strokeStyle=i===0?"rgba(79,10,20,.87)":"rgba(121,15,27,.66)";c.stroke();
   }
-  for(let i=0;i<4;i++){
-   c.beginPath();c.arc(rnd(-radius*.46,radius*.46),rnd(-radius*.35,radius*.42),rnd(.65,1.5),0,Math.PI*2);
+  for(let i=0;i<8;i++){
+   c.beginPath();c.arc(rnd(-radius*.55,radius*.55),rnd(-radius*.42,radius*.5),rnd(.7,1.9),0,Math.PI*2);
    c.fillStyle="rgba(106,15,23,.6)";c.fill();
   }
  }
  c.restore();surface.texture.needsUpdate=true;
 }
+function paintBloodTrail(surface,u,v,intensity=1){
+ const c=surface.ctx,x=clamp((u+.5)*512,16,496),y=clamp((.5-v)*512,14,455);
+ const power=clamp(intensity,.5,2.3);
+ c.save();c.lineCap="round";c.lineJoin="round";
+ for(let i=0;i<2+Math.floor(power);i++){
+  const x0=x+rnd(-7,7),y0=y+rnd(-5,7),len=rnd(23,46)*power;
+  c.beginPath();c.moveTo(x0,y0);
+  c.bezierCurveTo(x0+rnd(-5,7),y0+len*.25,x0+rnd(-8,9),y0+len*.63,x0+rnd(-8,10),y0+len);
+  c.strokeStyle=i===0?"rgba(69,7,17,.8)":"rgba(119,13,25,.62)";
+  c.lineWidth=rnd(1.6,3.7)*Math.min(1.7,power);c.stroke();
+ }
+ for(let i=0;i<8+Math.floor(power*5);i++){
+  c.beginPath();c.arc(x+rnd(-22,22)*power,y+rnd(-15,28)*power,rnd(.6,2),0,Math.PI*2);
+  c.fillStyle=i%3===0?"rgba(150,24,31,.62)":"rgba(73,9,16,.62)";c.fill();
+ }
+ c.restore();surface.texture.needsUpdate=true;
+}
+function bloodFlow(f,site,strength=1){
+ const info=FACE_SITES[site];if(!info)return;
+ paintBloodTrail(f[info.surface],info.x,info.y-.04,strength);
+ if(site==="nose"){
+  paintBloodTrail(f.faceDamage,rnd(-.06,.06),-.19,strength*.78);
+  if(f.headHits>=7)paintBloodTrail(f.faceDamage,rnd(-.09,.09),-.30,strength*.66);
+ }
+ if(site.startsWith("brow"))paintBloodTrail(f.faceDamage,info.x,info.y-.13,strength*.9);
+ if(site==="lip")paintBloodTrail(f.faceDamage,rnd(-.1,.1),-.30,strength*.8);
+}
+
 const FACE_SITES={
  cheekL:{surface:"faceDamage",x:-.29,y:-.065,tone:"pink"},
  cheekR:{surface:"faceDamage",x:.29,y:-.065,tone:"pink"},
@@ -296,8 +324,8 @@ function damageTextures(zone,style,amount){
   w[site]=(w[site]||0)+1;
   const count=w[site],info=FACE_SITES[site];
   const tone=count===1?"pink":count<3?info.tone:(site.startsWith("eye")?"blue":count>=5?"violet":info.tone);
-  const bleedAllowed=f.headHits>=6&&count>=2;
-  const chance=site==="nose"?.19:site==="lip"?.17:site.startsWith("brow")?.14:site.startsWith("eye")?.08:.035;
+  const bleedAllowed=f.headHits>=5&&count>=2;
+  const chance=site==="nose"?.33:site==="lip"?.31:site.startsWith("brow")?.27:site.startsWith("eye")?.16:.09;
   const opened=bleedAllowed&&Math.random()<chance;
   if(opened)f.activeWounds[site]=true;
   paintContusion(f[info.surface],info.x+rnd(-.025,.025),info.y+rnd(-.024,.024),
@@ -306,12 +334,21 @@ function damageTextures(zone,style,amount){
   if(f.headHits>=2&&!f.activeWounds.nose&&Math.random()<.10){
    f.activeWounds.nose=true;
    paintContusion(f.noseDamage,0,-.04,.9,"red",true);
+   bloodFlow(f,"nose",.85);
   }
-  if(f.activeWounds[site]&&count>=3){
+  if(f.activeWounds[site]){
    paintContusion(f[info.surface],info.x,info.y-.035,Math.min(5,count*.7),"red",true);
+   bloodFlow(f,site,Math.min(1.95,.7+count*.18));
   }
-  if(f.headHits>=5&&f.activeWounds.nose&&Math.random()<.24)
+  if(f.headHits>=5&&f.activeWounds.nose){
+   if(Math.random()<.62)bloodFlow(f,"nose",Math.min(2.2,.7+f.headHits*.12));
    paintContusion(f.noseDamage,0,-.12,Math.min(3,f.headHits*.2),"red",true);
+  }
+  if(f.headHits>=9&&Math.random()<.14){
+   const possible=["lip","browL","browR","eyeL","eyeR"];
+   const other=possible[Math.floor(Math.random()*possible.length)];
+   if((f.injuries[other]||0)>0){f.activeWounds[other]=true;bloodFlow(f,other,1.1);}
+  }
   f.bruise.visible=false;
   f.bleeding=Object.keys(f.activeWounds).filter(k=>f.activeWounds[k]).length;
   return {site,bleeding:!!f.activeWounds[site]||!!f.activeWounds.nose};
@@ -323,9 +360,13 @@ function damageTextures(zone,style,amount){
   (count%3===0?"blue":count%3===1?"pink":"olive");
  // The same body area becomes more discoloured gradually, without spreading across unrelated parts.
  paintContusion(f.torsoDamage,u,zone==="liver"?-.21:rnd(-.12,.25),Math.min(5,count*.47),tone,false);
- if(count>=7&&amount>=19&&Math.random()<.09){
+ if(count>=5&&amount>=17&&Math.random()<.2){
   paintContusion(f.torsoDamage,u,-.14,Math.min(3,count*.4),"red",true);
   f.activeWounds.torso=true;
+ }
+ if(f.activeWounds.torso){
+  paintBloodTrail(f.torsoDamage,u,-.17,Math.min(2,.65+count*.1));
+  if(count>=8&&Math.random()<.55)paintBloodTrail(f.shortsDamage,rnd(-.15,.15),.14,.65);
  }
  return {site,bleeding:!!f.activeWounds.torso};
 }
@@ -531,9 +572,10 @@ function streakParticle(point,strong){
  droplets.push({mesh,life:rnd(.65,1.2),velocity:new THREE.Vector3(rnd(-2,2),rnd(.25,2.7),rnd(-2,2))});
 }
 function splatter(point,strong){
- const count=strong?13:5;
+ const count=strong?17:8;
  for(let i=0;i<count;i++)streakParticle(point,strong);
- if(strong)spill(point.x+rnd(-.65,.65),point.z+rnd(-.65,.65),rnd(.10,.28));
+ if(strong)spill(point.x+rnd(-.65,.65),point.z+rnd(-.65,.65),rnd(.13,.3));
+ else if(Math.random()<.48)spill(point.x+rnd(-.45,.45),point.z+rnd(-.45,.45),rnd(.06,.12));
 }
 
 function hud(){
@@ -622,14 +664,18 @@ function scoreHit(style,zone){
  if(zone==="head"){
   f.headHits++;
   const mark=damageTextures(zone,style,damage);
-  if(mark.bleeding&&Math.random()<(style==="jab"?.12:.35)){
+  if(mark.bleeding&&Math.random()<(style==="jab"?.44:.78)){
    f.head.updateMatrixWorld(true);
    const point=f.head.localToWorld(new THREE.Vector3(rnd(-.2,.2),rnd(-.2,.1),-.39));
-   splatter(point,false);
+   splatter(point,style==="hook"||style==="uppercut");
   }
  }else{
   f.bodyHits++;
-  damageTextures(zone,style,damage);
+  const bodyWound=damageTextures(zone,style,damage);
+  if(bodyWound.bleeding&&Math.random()<.53){
+   f.torso.updateWorldMatrix(true,false);
+   splatter(f.torso.localToWorld(new THREE.Vector3(zone==="liver"?.25:0,-.07,-.37)),false);
+  }
   if(zone==="liver"){
    f.liverFlinch=Math.max(f.liverFlinch,rnd(.8,1.55));
    f.stagger=Math.max(f.stagger,.55);
@@ -735,13 +781,15 @@ function updateOpponent(dt){
  if(f.bleeding>0){
   f.bleedClock-=dt;
   if(f.bleedClock<=0&&droplets.length<55){
-   f.bleedClock=rnd(1.2,3);
+   f.bleedClock=rnd(.45,1.25)/(1+Math.min(.8,f.bleeding*.12));
    f.head.updateMatrixWorld(true);
    let p;
    if(f.activeWounds.nose)p=f.head.localToWorld(new THREE.Vector3(0,-.24,-.41));
    else if(f.activeWounds.lip)p=f.head.localToWorld(new THREE.Vector3(0,-.28,-.35));
    else p=f.head.localToWorld(new THREE.Vector3(.15,.06,-.33));
    streakParticle(p,false);
+   if(f.bleeding>=2&&Math.random()<.33)streakParticle(p,false);
+   if(Math.random()<.45)spill(f.root.position.x+rnd(-.4,.4),f.root.position.z+rnd(-.4,.4),rnd(.035,.09));
   }
  }
 }
