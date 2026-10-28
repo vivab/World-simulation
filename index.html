@@ -70,7 +70,7 @@ button:active{transform:translate(2px,2px);box-shadow:1px 1px #050507}
  <div id="hudCenter"><div id="cross">+</div></div>
  <div id="zone"></div>
  <div id="impact"></div>
- <div id="intro">Подойди к противнику, наведи прицел на голову или корпус и бей!</div>
+ <div id="intro">Руки в стойке. Прицелься в голову, корпус или печень — синяки и кровь накапливаются.</div>
  <div id="info">WASD / СТРЕЛКИ — ШАГ · МЫШЬ — ОСМОТР · SPACE / J — ДЖЕБ · K — ПРЯМОЙ · L — ХУК · I — АППЕРКОТ · Q / E — УКЛОН · R — РЕВАНШ</div>
  <div id="mobile">
   <div id="mobileLabel">ДЖОЙСТИК · ПОВОРОТ КАМЕРЫ ПАЛЬЦЕМ СПРАВА</div>
@@ -202,11 +202,85 @@ function boxingGlove(parent,side,color){
  box(g,.22,.04,.06,mats.white,0,-.08,.34);
  return g;
 }
+
+function createDamageSurface(parent,w,h,x=0,y=0,z=-.35){
+ const canvas=document.createElement("canvas");canvas.width=512;canvas.height=512;
+ const ctx=canvas.getContext("2d");
+ const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+ texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;
+ const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({
+  map:texture,transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  polygonOffset:true,polygonOffsetFactor:-2
+ }));
+ mesh.position.set(x,y,z);mesh.renderOrder=3;parent.add(mesh);
+ return {canvas,ctx,texture};
+}
+function paintContusion(surface,u,v,size=1,bleeds=false){
+ const c=surface.ctx,px=(u+.5)*512,py=(.5-v)*512,r=rnd(27,47)*size;
+ c.save();c.translate(px,py);c.rotate(rnd(-.6,.6));
+ const halo=c.createRadialGradient(0,0,r*.05,0,0,r*1.55);
+ halo.addColorStop(0,"rgba(62,23,78,.66)");
+ halo.addColorStop(.27,"rgba(78,27,88,.50)");
+ halo.addColorStop(.57,"rgba(113,33,61,.41)");
+ halo.addColorStop(.84,"rgba(158,77,58,.19)");
+ halo.addColorStop(1,"rgba(143,65,48,0)");
+ c.fillStyle=halo;c.beginPath();c.ellipse(0,0,r*1.6,r*1.1,0,0,Math.PI*2);c.fill();
+ for(let i=0;i<5;i++){
+  const x=rnd(-r*.6,r*.6),y=rnd(-r*.35,r*.35),rr=rnd(r*.16,r*.45);
+  const g=c.createRadialGradient(x,y,0,x,y,rr);
+  g.addColorStop(0,Math.random()<.55?"rgba(57,25,90,.31)":"rgba(121,32,46,.31)");
+  g.addColorStop(1,"rgba(90,20,60,0)");
+  c.fillStyle=g;c.beginPath();c.arc(x,y,rr,0,Math.PI*2);c.fill();
+ }
+ if(bleeds){
+  c.lineCap="round";c.lineJoin="round";
+  for(let i=0;i<3;i++){
+   const x=rnd(-r*.4,r*.4),y=rnd(-r*.3,r*.15),length=rnd(25,56)*size;
+   c.beginPath();c.moveTo(x,y);
+   c.bezierCurveTo(x+rnd(-8,7),y+length*.38,x+rnd(-9,9),y+length*.7,x+rnd(-4,6),y+length);
+   c.lineWidth=rnd(2.6,6)*size;
+   c.strokeStyle=i===0?"rgba(83,9,18,.90)":"rgba(154,19,28,.75)";
+   c.stroke();
+   c.fillStyle="rgba(107,10,20,.75)";
+   c.beginPath();c.ellipse(x+rnd(-4,6),y+length,3*size,6*size,0,0,Math.PI*2);c.fill();
+  }
+  for(let i=0;i<11;i++){
+   c.fillStyle=Math.random()<.3?"rgba(177,33,33,.74)":"rgba(83,7,16,.75)";
+   c.beginPath();c.arc(rnd(-r*.9,r*.9),rnd(-r*.8,r*.8),rnd(1.2,3.3),0,Math.PI*2);c.fill();
+  }
+ }
+ c.restore();surface.texture.needsUpdate=true;
+}
+function damageTextures(zone,style,amount){
+ const f=opponent;
+ if(zone==="head"){
+  const side=Math.random()<.5?-1:1;
+  paintContusion(f.faceDamage,side*rnd(.18,.33),rnd(-.2,.22),style==="jab"?.67:1,true);
+  if(f.headHits%2===0||style==="uppercut")
+   paintContusion(f.faceDamage,rnd(-.18,.18),rnd(-.31,-.14),.58,true);
+  if(f.headHits>=3)paintContusion(f.noseDamage,0,rnd(-.15,.15),.6,true);
+  f.bruise.visible=f.headHits>=4;
+  f.bleeding=Math.min(10,f.bleeding+1);
+ }else{
+  const x=zone==="liver"?.29:rnd(-.27,.27);
+  paintContusion(f.torsoDamage,x,rnd(-.22,.23),zone==="liver"?1.12:.83,amount>=17);
+  if(amount>=18||f.bodyHits%3===0)
+   paintContusion(f.torsoDamage,x+rnd(-.08,.08),rnd(-.24,.18),.48,false);
+ }
+}
+
 function makeOpponent(){
  const root=new THREE.Group();scene.add(root);
  const visual=new THREE.Group();root.add(visual);
  const torso=new THREE.Group();visual.add(torso);torso.position.set(0,1.48,0);
  box(torso,.93,1.04,.54,mats.skin,0,.19,0);
+ const muscles=mat(0xa87e68),warmSkin=mat(0xc1a187);
+ for(const side of [-1,1]){
+  const pec=box(torso,.42,.34,.08,warmSkin,side*.225,.44,-.30);
+  pec.rotation.z=-side*.045;
+  box(torso,.16,.3,.028,muscles,side*.3,-.035,-.284);
+ }
+ box(torso,.12,.07,.025,0x906e5d,0,-.16,-.285);
  box(torso,1.08,.19,.56,mats.shorts,0,-.39,0);
  for(const sx of [-1,1]){
   ico(torso,.25,mats.skin,sx*.35,.53,-.01,1).scale.set(1,1,.84);
@@ -244,39 +318,77 @@ function makeOpponent(){
  box(head,.17,.19,.13,mats.skin,0,-.07,-.36);
  box(head,.27,.04,.024,0x623b36,0,-.24,-.326);
  for(const x of [-.33,.33])ico(head,.14,mats.skin,x,-.015,0,1);
+ const faceDamage=createDamageSurface(head,.625,.68,0,0,-.365);
+ const noseDamage=createDamageSurface(head,.2,.21,0,-.07,-.45);
+ const torsoDamage=createDamageSurface(torso,.89,.95,0,.18,-.36);
  const bloodMarks=[];
- const coords=[[-.24,.13,-.336,.16,.10],[-.23,-.09,-.337,.10,.20],
-               [.19,.02,-.337,.13,.12],[.22,-.2,-.338,.09,.21],
-               [0,-.22,-.432,.10,.19],[0,.19,-.333,.13,.08],
-               [-.06,-.12,-.432,.09,.18],[.11,-.27,-.341,.07,.12]];
- const bloodMaterial=new THREE.MeshBasicMaterial({color:0x8e0d1b,side:THREE.DoubleSide,depthWrite:false});
- for(const [x,y,z,w,h] of coords){
-  const mark=new THREE.Mesh(new THREE.PlaneGeometry(w,h),bloodMaterial);
-  mark.position.set(x,y,z);mark.visible=false;head.add(mark);bloodMarks.push(mark);
- }
  const bruise=ico(head,.15,0x5a365a,-.22,-.05,-.33,1);
  bruise.scale.set(1.1,.65,.12);bruise.visible=false;
- return {root,visual,torso,head,arms,bloodMarks,bruise,health:150,maxHealth:150,
+ return {root,visual,torso,head,arms,bloodMarks,bruise,faceDamage,noseDamage,torsoDamage,health:150,maxHealth:150,
    position:new THREE.Vector3(0,RING_Y,-1.75),home:new THREE.Vector3(0,RING_Y,-1.75),
    impulse:new THREE.Vector3(),stagger:0,knockTimer:0,knockCount:0,dead:false,flinch:0,
-   headHits:0,bodyHits:0,bleeding:0,combo:0,lastHitTime:-10,lastTypes:[],hits:0};
+   headHits:0,bodyHits:0,bleeding:0,bleedClock:0,combo:0,lastHitTime:-10,lastTypes:[],hits:0};
 }
 const opponent=makeOpponent();opponent.root.position.copy(opponent.home);opponent.root.rotation.y=Math.PI;
 const player={position:new THREE.Vector3(0,RING_Y,3.6),yaw:0,pitch:0,health:100,
   walking:0,step:0,slip:0,slipDisplay:0,punch:null,rest:0,hits:0};
 camera.position.set(0,3.0,3.6);
+
 const hands=new THREE.Group();camera.add(hands);
+const UP=new THREE.Vector3(0,1,0);
+function armSegment(parent,r,m){
+ const o=new THREE.Mesh(new THREE.CylinderGeometry(r*.92,r,1,8),m);
+ o.frustumCulled=false;o.castShadow=false;parent.add(o);return o;
+}
+function setArmSegment(mesh,a,b){
+ const delta=b.clone().sub(a),len=delta.length();
+ mesh.position.copy(a).add(b).multiplyScalar(.5);
+ mesh.quaternion.setFromUnitVectors(UP,delta.normalize());
+ mesh.scale.set(1,Math.max(.05,len),1);
+}
 function viewArm(side,color){
- const joint=new THREE.Group();hands.add(joint);
- const sleeve=mat(0x3b5265),skin=mat(0xb88f72);
- const forearm=box(joint,.23,.22,.52,skin,0,-.04,.08);
- forearm.rotation.x=.13;
- const cuff=box(joint,.27,.25,.22,sleeve,0,-.05,.22);
- const glove=boxingGlove(joint,side,color);
- glove.position.z=-.3;glove.rotation.x=-.12;
- return {joint,glove};
+ const root=new THREE.Group();hands.add(root);
+ const sleeve=mat(0x41566a),skin=mat(0xb88f72),wrap=mat(0x2b486e);
+ const upper=armSegment(root,.16,sleeve),forearm=armSegment(root,.126,skin),wrist=armSegment(root,.14,wrap);
+ const glove=boxingGlove(root,side,color);
+ glove.scale.setScalar(.93);
+ glove.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=false}});
+ return {root,upper,forearm,wrist,glove,side};
 }
 const left=viewArm(-1,0x345f93),right=viewArm(1,0x345f93);
+let guardBreath=0;
+function armPose(arm,t,style,bob){
+ const side=arm.side;
+ const shoulder=new THREE.Vector3(side*.37,-.65,.14);
+ const elbow=new THREE.Vector3(side*.5,-.53+bob*.5,-.30);
+ const wrist=new THREE.Vector3(side*.29,-.29+bob,-.74+(side<0?-.12:0));
+ if(t>0){
+  if(style==="jab"||style==="cross"){
+   wrist.x=lerp(wrist.x,side*.15,t);
+   wrist.y+=t*.09;
+   wrist.z-=t*(style==="jab"?.78:1.05);
+   elbow.x=lerp(elbow.x,side*.26,t);
+   elbow.y+=t*.10;elbow.z-=t*.48;
+  }else if(style==="hook"){
+   wrist.x=lerp(wrist.x,-.02,t);
+   wrist.y+=t*.17;wrist.z-=t*.62;
+   elbow.x=lerp(elbow.x,.56,t);
+   elbow.y+=t*.19;elbow.z-=t*.52;
+  }else if(style==="uppercut"){
+   wrist.x=lerp(wrist.x,.07,t);
+   wrist.y+=t*.61;wrist.z-=t*.49;
+   elbow.x=lerp(elbow.x,.37,t);
+   elbow.y+=t*.08;elbow.z-=t*.26;
+  }
+ }
+ const forearmEnd=wrist.clone().add(new THREE.Vector3(0,0,.08));
+ setArmSegment(arm.upper,shoulder,elbow);
+ setArmSegment(arm.forearm,elbow,forearmEnd);
+ setArmSegment(arm.wrist,forearmEnd,wrist.clone().add(new THREE.Vector3(0,0,-.07)));
+ arm.glove.position.copy(wrist);
+ arm.glove.rotation.set(-.08,-side*.05,t*(style==="hook"?-.48:style==="uppercut"?.3:0));
+}
+
 let audioContext=null,muted=false,impactTimer=0,introTimer=8,shake=0,redFlash=0,ended=false;
 function audioHit(pitch=145,len=.11){
  if(muted)return;
@@ -299,7 +411,7 @@ function say(text,duration=1.2){
 }
 const stains=[],droplets=[];
 function spill(x,z,r){
- if(stains.length>=180)return;
+ if(stains.length>=220)return;
  const shape=new THREE.Shape();
  for(let i=0;i<=9;i++){
   const a=(i%9)*Math.PI*2/9,scale=r*rnd(.7,1.25);
@@ -307,7 +419,7 @@ function spill(x,z,r){
   else shape.lineTo(Math.cos(a)*scale,Math.sin(a)*scale);
  }
  const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shape),
- new THREE.MeshBasicMaterial({color:Math.random()<.3?0x5b0a12:0x89101a,side:THREE.DoubleSide,depthWrite:false}));
+ new THREE.MeshBasicMaterial({color:Math.random()<.35?0x5b0a12:0x89101a,side:THREE.DoubleSide,depthWrite:false,transparent:true,opacity:r>.22?.88:.8}));
  mesh.rotation.x=-Math.PI/2;mesh.rotation.z=rnd(0,6.28);
  mesh.position.set(clamp(x,-5.55,5.55),.76+stains.length*.00003,clamp(z,-5.55,5.55));
  mesh.renderOrder=1;scene.add(mesh);stains.push(mesh);
@@ -334,6 +446,11 @@ function knockDown(liver=false){
  if(opponent.knockTimer>0||opponent.dead)return;
  opponent.knockCount++;opponent.knockTimer=3.3;
  opponent.impulse.multiplyScalar(.22);
+ if(opponent.bleeding>0){
+  opponent.head.updateMatrixWorld(true);
+  splatter(opponent.head.localToWorld(new THREE.Vector3(0,-.27,-.39)),true);
+  spill(opponent.root.position.x+rnd(-.35,.35),opponent.root.position.z+rnd(-.35,.35),rnd(.2,.4));
+ }
  opponent.stagger=0;opponent.combo=0;
  if(liver)say("УДАР В ПЕЧЕНЬ! НОКДАУН",1.8);
  else say("НОКДАУН!",1.5);
@@ -390,15 +507,18 @@ function scoreHit(style,zone){
  opponent.impulse.add(new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw)).multiplyScalar(style==="hook"?.6:.27));
  if(zone==="head"){
   opponent.headHits++;
-  opponent.bleeding=Math.min(opponent.bloodMarks.length,opponent.bleeding+(style==="hook"||style==="uppercut"?2:1));
-  for(let i=0;i<opponent.bleeding;i++)opponent.bloodMarks[i].visible=true;
-  opponent.bruise.visible=opponent.headHits>=2;
+  damageTextures(zone,style,damage);
   opponent.head.updateMatrixWorld(true);
-  splatter(opponent.head.getWorldPosition(new THREE.Vector3()),style!=="jab");
- }else if(zone==="liver"){
-  splatter(opponent.root.localToWorld(new THREE.Vector3(.3,1.5,-.35)),false);
- }else if(style==="hook"&&Math.random()<.45){
-  spill(opponent.root.position.x+rnd(-.4,.4),opponent.root.position.z+rnd(-.4,.4),.09);
+  const impact=opponent.head.localToWorld(new THREE.Vector3(rnd(-.24,.24),rnd(-.19,.2),-.44));
+  splatter(impact,style==="hook"||style==="uppercut"||opponent.combo>2);
+ }else{
+  opponent.bodyHits++;
+  damageTextures(zone,style,damage);
+  if(zone==="liver"||damage>=18){
+   opponent.torso.updateMatrixWorld(true);
+   const impact=opponent.torso.localToWorld(new THREE.Vector3(zone==="liver"?.28:0,-.06,-.39));
+   splatter(impact,damage>22);
+  }
  }
  shake=style==="jab"?.07:.13;
  const zoneText=zone==="head"?"ГОЛОВА":zone==="liver"?"ПЕЧЕНЬ":"КОРПУС";
@@ -431,30 +551,15 @@ function updatePunch(dt){
  }
  if(a.t>=a.duration)player.punch=null;
 }
-function updateGloves(){
- const a=player.punch,phase=a?Math.sin(Math.PI*clamp(a.t/a.duration,0,1)):0;
- const walking=Math.abs(player.walking)*.023,bob=Math.sin(player.step*2)*walking;
- left.joint.position.set(-.35,-.39+bob,-.83);
- right.joint.position.set(.35,-.39-bob,-.83);
- left.joint.rotation.set(0,0,0);right.joint.rotation.set(0,0,0);
- if(a){
-  const active=a.style==="jab"?left.joint:right.joint;
-  if(a.style==="jab"||a.style==="cross"){
-   active.position.z-=phase*(a.style==="jab"?.91:1.13);
-   active.position.y+=phase*.07;
-   active.rotation.x=-phase*.16;
-  }else if(a.style==="hook"){
-   active.position.x-=phase*.43;
-   active.position.z-=phase*.42;
-   active.rotation.y=phase*.85;
-  }else{
-   active.position.y+=phase*.59;
-   active.position.z-=phase*.45;
-   active.rotation.x=-phase*.7;
-  }
- }
- const slip=player.slipDisplay;
- left.joint.position.x-=slip*.08;right.joint.position.x-=slip*.08;
+function updateGloves(dt){
+ guardBreath+=dt*1.8;
+ const a=player.punch,p=a?clamp(a.t/a.duration,0,1):0;
+ const reach=a?(p<.35?smooth(p/.35):1-smooth((p-.35)/.65)):0;
+ const bob=Math.sin(player.step*2)*player.walking*.02+Math.sin(guardBreath)*.012;
+ armPose(left,a?.style==="jab"?reach:0,a?.style||"jab",bob);
+ armPose(right,a&&a.style!=="jab"?reach:0,a?.style||"cross",-bob);
+ hands.position.x=-player.slipDisplay*.04;
+ hands.rotation.z=-player.slipDisplay*.05;
 }
 function updateOpponent(dt){
  const f=opponent;
@@ -467,6 +572,17 @@ function updateOpponent(dt){
  f.root.position.x=clamp(f.root.position.x,-.45,.45);
  f.root.position.z=clamp(f.root.position.z,f.home.z-.45,f.home.z+.45);
  if(f.knockTimer>0)f.knockTimer=Math.max(0,f.knockTimer-dt);
+ if(f.bleeding>0){
+  f.bleedClock-=dt;
+  if(f.bleedClock<=0){
+   f.bleedClock=rnd(.55,1.6);
+   f.head.updateMatrixWorld(true);
+   const jaw=f.head.localToWorld(new THREE.Vector3(rnd(-.1,.1),-.27,-.38));
+   const blood=ico(scene,rnd(.025,.055),0x820f1a,jaw.x,jaw.y,jaw.z,0);
+   blood.castShadow=false;
+   droplets.push({mesh:blood,life:3,velocity:new THREE.Vector3(rnd(-.12,.12),rnd(-.3,0),rnd(-.12,.12))});
+  }
+ }
  const knocked=f.knockTimer>0||f.dead;
  const targetTilt=knocked?1.48:0;
  f.visual.rotation.x=lerp(f.visual.rotation.x,targetTilt,Math.min(1,dt*(knocked?7:3.6)));
@@ -488,7 +604,7 @@ function updateDrops(dt){
   d.life-=dt;d.velocity.y-=10*dt;
   d.mesh.position.addScaledVector(d.velocity,dt);
   if(d.mesh.position.y<=RING_Y+.02||d.life<=0){
-   if(d.mesh.position.y<=RING_Y+.05&&Math.random()<.68)spill(d.mesh.position.x,d.mesh.position.z,rnd(.035,.11));
+   if(d.mesh.position.y<=RING_Y+.05&&Math.random()<.8)spill(d.mesh.position.x,d.mesh.position.z,rnd(.045,.13));
    scene.remove(d.mesh);droplets.splice(i,1);
   }
  }
@@ -600,7 +716,7 @@ function update(dt){
  camera.rotation.x=player.pitch;
  camera.rotation.z=-player.slipDisplay*.14;
  camera.updateMatrixWorld(true);
- updatePunch(dt);updateGloves();updateOpponent(dt);updateDrops(dt);
+ updatePunch(dt);updateGloves(dt);updateOpponent(dt);updateDrops(dt);
  const zone=hitZone();
  const label=zone==="head"?"ГОЛОВА":zone==="liver"?"ПЕЧЕНЬ":zone==="body"?"КОРПУС":"";
  $("zone").textContent=label;
@@ -619,12 +735,15 @@ function reset(){
  opponent.visual.position.set(0,0,0);opponent.visual.rotation.set(0,0,0);
  opponent.health=150;opponent.impulse.set(0,0,0);opponent.dead=false;opponent.knockTimer=0;
  opponent.stagger=0;opponent.flinch=0;opponent.knockCount=0;opponent.headHits=0;
- opponent.bodyHits=0;opponent.bleeding=0;opponent.combo=0;opponent.lastHitTime=-10;
+ opponent.bodyHits=0;opponent.bleeding=0;opponent.bleedClock=0;opponent.combo=0;opponent.lastHitTime=-10;
+ for(const surface of [opponent.faceDamage,opponent.noseDamage,opponent.torsoDamage]){
+  surface.ctx.clearRect(0,0,512,512);surface.texture.needsUpdate=true;
+ }
  opponent.lastTypes=[];opponent.hits=0;opponent.bloodMarks.forEach(m=>m.visible=false);
  opponent.bruise.visible=false;
  player.position.set(0,RING_Y,3.6);player.yaw=0;player.pitch=0;
  player.walking=0;player.step=0;player.slip=0;player.slipDisplay=0;player.punch=null;player.rest=0;
- camera.position.set(0,RING_Y+1.72,3.6);
+ camera.position.set(0,RING_Y+1.72,3.6);guardBreath=0;
  impactTimer=0;introTimer=6;$("intro").style.display="block";
  $("impact").classList.remove("show");$("zone").textContent="";
  controls.clear();moveX=moveZ=0;leftSlip=rightSlip=false;
