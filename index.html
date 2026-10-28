@@ -220,76 +220,115 @@ function createDamageSurface(parent,w,h,x=0,y=0,z=-.35){
  mesh.position.set(x,y,z);mesh.renderOrder=3;parent.add(mesh);
  return {canvas,ctx,texture};
 }
-function paintContusion(surface,u,v,size=1,bleeds=false){
- const c=surface.ctx,px=(u+.5)*512,py=(.5-v)*512,r=rnd(27,47)*size;
- c.save();c.translate(px,py);c.rotate(rnd(-.6,.6));
- const halo=c.createRadialGradient(0,0,r*.05,0,0,r*1.55);
- halo.addColorStop(0,"rgba(62,23,78,.66)");
- halo.addColorStop(.27,"rgba(78,27,88,.50)");
- halo.addColorStop(.57,"rgba(113,33,61,.41)");
- halo.addColorStop(.84,"rgba(158,77,58,.19)");
- halo.addColorStop(1,"rgba(143,65,48,0)");
- c.fillStyle=halo;c.beginPath();c.ellipse(0,0,r*1.6,r*1.1,0,0,Math.PI*2);c.fill();
- for(let i=0;i<5;i++){
-  const x=rnd(-r*.6,r*.6),y=rnd(-r*.35,r*.35),rr=rnd(r*.16,r*.45);
-  const g=c.createRadialGradient(x,y,0,x,y,rr);
-  g.addColorStop(0,Math.random()<.55?"rgba(57,25,90,.31)":"rgba(121,32,46,.31)");
-  g.addColorStop(1,"rgba(90,20,60,0)");
-  c.fillStyle=g;c.beginPath();c.arc(x,y,rr,0,Math.PI*2);c.fill();
- }
- if(bleeds){
-  c.lineCap="round";c.lineJoin="round";
-  for(let i=0;i<3;i++){
-   const x=rnd(-r*.4,r*.4),y=rnd(-r*.3,r*.15),length=rnd(25,56)*size;
-   c.beginPath();c.moveTo(x,y);
-   c.bezierCurveTo(x+rnd(-8,7),y+length*.38,x+rnd(-9,9),y+length*.7,x+rnd(-4,6),y+length);
-   c.lineWidth=rnd(2.6,6)*size;
-   c.strokeStyle=i===0?"rgba(83,9,18,.90)":"rgba(154,19,28,.75)";
-   c.stroke();
-   c.fillStyle="rgba(107,10,20,.75)";
-   c.beginPath();c.ellipse(x+rnd(-4,6),y+length,3*size,6*size,0,0,Math.PI*2);c.fill();
+function paintContusion(surface,u,v,stage=1,tone="pink",bleeding=false){
+ const c=surface.ctx,px=clamp((u+.5)*512,20,492),py=clamp((.5-v)*512,20,492);
+ const radius=10+Math.min(5,stage)*3.4;
+ const colors={
+  pink:["rgba(170,70,65,.18)","rgba(184,77,75,.12)","rgba(132,55,53,0)"],
+  red:["rgba(146,46,50,.29)","rgba(150,50,59,.18)","rgba(126,44,49,0)"],
+  violet:["rgba(75,43,89,.35)","rgba(122,55,95,.23)","rgba(120,55,73,0)"],
+  blue:["rgba(61,54,105,.31)","rgba(93,70,125,.20)","rgba(109,66,86,0)"],
+  olive:["rgba(122,100,51,.25)","rgba(137,109,58,.15)","rgba(127,92,58,0)"],
+  brown:["rgba(116,65,44,.26)","rgba(148,75,60,.16)","rgba(107,71,57,0)"]
+ };
+ const col=colors[tone]||colors.pink;
+ c.save();c.translate(px,py);c.rotate(rnd(-.45,.45));
+ const g=c.createRadialGradient(0,0,1,0,0,radius*1.85);
+ g.addColorStop(0,col[0]);g.addColorStop(.35,col[1]);g.addColorStop(1,col[2]);
+ c.fillStyle=g;c.beginPath();c.ellipse(0,0,radius*1.85,radius*rnd(1.1,1.45),0,0,Math.PI*2);c.fill();
+ if(stage>2){
+  for(let i=0;i<2;i++){
+   const x=rnd(-radius*.4,radius*.4),y=rnd(-radius*.3,radius*.3),r=radius*rnd(.25,.5);
+   const patch=c.createRadialGradient(x,y,0,x,y,r);
+   patch.addColorStop(0,tone==="olive"?"rgba(98,86,56,.12)":"rgba(69,35,78,.17)");
+   patch.addColorStop(1,"rgba(95,54,82,0)");
+   c.fillStyle=patch;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
   }
-  for(let i=0;i<11;i++){
-   c.fillStyle=Math.random()<.3?"rgba(177,33,33,.74)":"rgba(83,7,16,.75)";
-   c.beginPath();c.arc(rnd(-r*.9,r*.9),rnd(-r*.8,r*.8),rnd(1.2,3.3),0,Math.PI*2);c.fill();
+ }
+ if(bleeding){
+  const width=rnd(1.2,2.9),length=rnd(12,28)*(stage>3?1.22:1);
+  for(let i=0;i<(stage>=4?2:1);i++){
+   const x=rnd(-radius*.22,radius*.22),y=rnd(-radius*.15,radius*.2);
+   c.beginPath();c.moveTo(x,y);
+   c.bezierCurveTo(x+rnd(-2,3),y+length*.32,x+rnd(-4,4),y+length*.7,x+rnd(-3,4),y+length);
+   c.lineWidth=width*(i===0?1:.65);c.lineCap="round";
+   c.strokeStyle=i===0?"rgba(95,13,21,.72)":"rgba(126,24,30,.50)";c.stroke();
+  }
+  for(let i=0;i<4;i++){
+   c.beginPath();c.arc(rnd(-radius*.46,radius*.46),rnd(-radius*.35,radius*.42),rnd(.65,1.5),0,Math.PI*2);
+   c.fillStyle="rgba(106,15,23,.6)";c.fill();
   }
  }
  c.restore();surface.texture.needsUpdate=true;
 }
+const FACE_SITES={
+ cheekL:{surface:"faceDamage",x:-.29,y:-.065,tone:"pink"},
+ cheekR:{surface:"faceDamage",x:.29,y:-.065,tone:"pink"},
+ eyeL:{surface:"faceDamage",x:-.24,y:.10,tone:"violet"},
+ eyeR:{surface:"faceDamage",x:.24,y:.10,tone:"violet"},
+ browL:{surface:"faceDamage",x:-.25,y:.29,tone:"red"},
+ browR:{surface:"faceDamage",x:.25,y:.29,tone:"red"},
+ nose:{surface:"noseDamage",x:0,y:.03,tone:"red"},
+ lip:{surface:"faceDamage",x:0,y:-.32,tone:"red"}
+};
+function aimedFaceSite(){
+ const head=opponent.head;
+ head.updateWorldMatrix(true,false);
+ camera.updateMatrixWorld(true);
+ const normal=new THREE.Vector3(0,0,-1).transformDirection(head.matrixWorld);
+ const facePoint=head.localToWorld(new THREE.Vector3(0,0,-.36));
+ const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(normal,facePoint);
+ const ray=new THREE.Ray(camera.position.clone(),new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize());
+ const worldPoint=ray.intersectPlane(plane,new THREE.Vector3());
+ if(!worldPoint)return Math.random()<.5?"cheekL":"cheekR";
+ const local=head.worldToLocal(worldPoint);
+ const x=clamp(local.x,-.31,.31),y=clamp(local.y,-.33,.32);
+ if(Math.abs(x)<.115){if(y<-.16)return "lip";if(y<.14)return "nose";}
+ const side=x<0?"L":"R";
+ if(y>.20)return "brow"+side;
+ if(y>.045)return "eye"+side;
+ return "cheek"+side;
+}
 function damageTextures(zone,style,amount){
  const f=opponent;
  if(zone==="head"){
-  const side=Math.random()<.5?-1:1;
-  paintContusion(f.faceDamage,side*rnd(.18,.33),rnd(-.2,.22),style==="jab"?.67:1,true);
-  if(f.headHits%2===0||style==="uppercut")
-   paintContusion(f.faceDamage,rnd(-.18,.18),rnd(-.31,-.14),.58,true);
-  if(f.headHits>=3)paintContusion(f.noseDamage,0,rnd(-.15,.15),.6,true);
-  if(f.headHits>=4){
-   for(let i=0;i<Math.min(4,Math.floor(f.headHits/3));i++){
-    paintContusion(f.faceDamage,rnd(-.29,.29),rnd(-.25,.28),rnd(.68,1.15),true);
-   }
+  const site=aimedFaceSite(),w=f.injuries;
+  w[site]=(w[site]||0)+1;
+  const count=w[site],info=FACE_SITES[site];
+  const tone=count===1?"pink":count<3?info.tone:(site.startsWith("eye")?"blue":count>=5?"violet":info.tone);
+  const bleedAllowed=f.headHits>=6&&count>=2;
+  const chance=site==="nose"?.19:site==="lip"?.17:site.startsWith("brow")?.14:site.startsWith("eye")?.08:.035;
+  const opened=bleedAllowed&&Math.random()<chance;
+  if(opened)f.activeWounds[site]=true;
+  paintContusion(f[info.surface],info.x+rnd(-.025,.025),info.y+rnd(-.024,.024),
+   count*.64+Math.min(3,f.headHits/10),tone,!!f.activeWounds[site]);
+  // Early nosebleed is possible after a couple of clean shots, but not guaranteed.
+  if(f.headHits>=2&&!f.activeWounds.nose&&Math.random()<.10){
+   f.activeWounds.nose=true;
+   paintContusion(f.noseDamage,0,-.04,.9,"red",true);
   }
-  if(f.headHits>=7){
-   paintContusion(f.faceDamage,0,rnd(-.12,.13),1.5,true);
-   paintContusion(f.noseDamage,0,-.12,1.1,true);
+  if(f.activeWounds[site]&&count>=3){
+   paintContusion(f[info.surface],info.x,info.y-.035,Math.min(5,count*.7),"red",true);
   }
-  f.bruise.visible=f.headHits>=3;
-  f.bleeding=Math.min(25,f.bleeding+1);
- }else{
-  const x=zone==="liver"?.29:rnd(-.27,.27);
-  paintContusion(f.torsoDamage,x,rnd(-.22,.23),zone==="liver"?1.12:.83,amount>=17);
-  if(amount>=18||f.bodyHits%3===0)
-   paintContusion(f.torsoDamage,x+rnd(-.08,.08),rnd(-.24,.18),.78,true);
-  if(f.bodyHits>=3){
-   paintContusion(f.shoulderDamage,rnd(-.28,.28),rnd(-.15,.15),rnd(.7,1.3),true);
-  }
-  if(f.bodyHits>=6){
-   for(let i=0;i<3;i++)paintContusion(f.torsoDamage,rnd(-.34,.34),rnd(-.32,.32),rnd(.6,1.3),true);
-   paintContusion(f.shortsDamage,rnd(-.25,.25),rnd(-.15,.15),.8,true);
-  }
+  if(f.headHits>=5&&f.activeWounds.nose&&Math.random()<.24)
+   paintContusion(f.noseDamage,0,-.12,Math.min(3,f.headHits*.2),"red",true);
+  f.bruise.visible=false;
+  f.bleeding=Object.keys(f.activeWounds).filter(k=>f.activeWounds[k]).length;
+  return {site,bleeding:!!f.activeWounds[site]||!!f.activeWounds.nose};
  }
+ const site=zone==="liver"?"liver":"body";
+ const w=f.injuries;w[site]=(w[site]||0)+1;
+ const count=w[site],u=zone==="liver"?.26:rnd(-.2,.2);
+ const tone=zone==="liver"?(count<3?"brown":count<6?"olive":"violet"):
+  (count%3===0?"blue":count%3===1?"pink":"olive");
+ // The same body area becomes more discoloured gradually, without spreading across unrelated parts.
+ paintContusion(f.torsoDamage,u,zone==="liver"?-.21:rnd(-.12,.25),Math.min(5,count*.47),tone,false);
+ if(count>=7&&amount>=19&&Math.random()<.09){
+  paintContusion(f.torsoDamage,u,-.14,Math.min(3,count*.4),"red",true);
+  f.activeWounds.torso=true;
+ }
+ return {site,bleeding:!!f.activeWounds.torso};
 }
-
 function makeOpponent(){
  const root=new THREE.Group();scene.add(root);
  const visual=new THREE.Group();root.add(visual);
@@ -308,6 +347,7 @@ function makeOpponent(){
   box(torso,.27,.09,.15,0x624b40,sx*.24,.39,-.282);
  }
  const shorts=mat(0x443c48),stripe=mat(0xc6b9ad);
+ const legs=[];
  box(visual,1.02,.56,.57,shorts,0,.82,0);
  for(const sx of [-1,1]){
   box(visual,.08,.56,.6,stripe,sx*.47,.83,0);
@@ -316,6 +356,7 @@ function makeOpponent(){
   const shin=new THREE.Group();shin.position.set(0,-.58,0);thigh.add(shin);
   box(shin,.33,.46,.33,mats.skin,0,-.25,0);
   box(shin,.38,.3,.48,mats.boot,0,-.48,-.07);
+  legs.push({thigh,shin});
  }
  const arms=[];
  for(const side of [-1,1]){
@@ -347,10 +388,11 @@ function makeOpponent(){
  const bloodMarks=[];
  const bruise=ico(head,.15,0x5a365a,-.22,-.05,-.33,1);
  bruise.scale.set(1.1,.65,.12);bruise.visible=false;
- return {root,visual,torso,head,arms,bloodMarks,bruise,faceDamage,noseDamage,torsoDamage,shoulderDamage,shortsDamage,health:1000,maxHealth:1000,
+ return {root,visual,torso,head,arms,legs,bloodMarks,bruise,faceDamage,noseDamage,torsoDamage,shoulderDamage,shortsDamage,health:1000,maxHealth:1000,
    position:new THREE.Vector3(0,RING_Y,-1.75),home:new THREE.Vector3(0,RING_Y,-1.75),
    impulse:new THREE.Vector3(),stagger:0,knockTimer:0,knockCount:0,dead:false,flinch:0,feetMotion:0,edgePressure:0,
-   headHits:0,bodyHits:0,bleeding:0,bleedClock:0,combo:0,lastHitTime:-10,lastTypes:[],hits:0};
+   fallProgress:0,fallSide:1,fallForward:1.3,liverFlinch:0,balance:0,fatigue:0,
+   injuries:{},activeWounds:{},headHits:0,bodyHits:0,bleeding:0,bleedClock:0,combo:0,lastHitTime:-10,lastTypes:[],hits:0};
 }
 const opponent=makeOpponent();opponent.root.position.copy(opponent.home);opponent.root.rotation.y=Math.PI;opponent.visual.scale.set(.83,1,.82);
 const player={position:new THREE.Vector3(0,RING_Y,3.6),yaw:0,pitch:0,health:1000,hookSide:1,
@@ -502,17 +544,23 @@ function hud(){
 }
 function knockDown(liver=false){
  if(opponent.knockTimer>0||opponent.dead)return;
- opponent.knockCount++;opponent.knockTimer=3.3;
- opponent.impulse.multiplyScalar(.22);
- if(opponent.bleeding>0){
-  opponent.head.updateMatrixWorld(true);
-  splatter(opponent.head.localToWorld(new THREE.Vector3(0,-.27,-.39)),true);
-  spill(opponent.root.position.x+rnd(-.35,.35),opponent.root.position.z+rnd(-.35,.35),rnd(.2,.4));
+ const f=opponent;
+ f.knockCount++;
+ f.knockTimer=rnd(4.1,5);
+ f.fallProgress=0;
+ f.fallSide=Math.random()<.5?-1:1;
+ f.fallForward=rnd(1.06,1.38);
+ f.impulse.multiplyScalar(.3);
+ f.balance*=.22;
+ f.combo=0;
+ f.liverFlinch=0;
+ if(f.bleeding>0&&Math.random()<.65){
+  f.head.updateMatrixWorld(true);
+  const p=f.head.localToWorld(new THREE.Vector3(0,-.25,-.34));
+  splatter(p,false);
  }
- opponent.stagger=0;opponent.combo=0;
- if(liver)say("УДАР В ПЕЧЕНЬ! НОКДАУН",1.8);
- else say("НОКДАУН!",1.5);
- audioHit(82,.24);shake=.34;hud();
+ say(liver?"НОКДАУН ПОСЛЕ УДАРА В ПЕЧЕНЬ":"НОКДАУН",1.7);
+ audioHit(83,.23);shake=.25;hud();
 }
 function hitZone(){
  if(opponent.dead||opponent.knockTimer>0)return null;
@@ -551,53 +599,72 @@ function punch(style){
  audioHit(96,.07);
 }
 function scoreHit(style,zone){
- const d=punchData[style],now=clock.elapsedTime;
- if(now-opponent.lastHitTime<2.3)opponent.combo=Math.min(8,opponent.combo+1);
- else {opponent.combo=1;opponent.lastTypes=[]}
- opponent.lastHitTime=now;
- opponent.lastTypes.push(style);if(opponent.lastTypes.length>4)opponent.lastTypes.shift();
- const three=opponent.lastTypes.slice(-3).join(",");
+ const f=opponent,d=punchData[style],now=clock.elapsedTime;
+ if(now-f.lastHitTime<2.2)f.combo=Math.min(8,f.combo+1);
+ else{f.combo=1;f.lastTypes=[]}
+ f.lastHitTime=now;
+ f.lastTypes.push(style);
+ if(f.lastTypes.length>4)f.lastTypes.shift();
+ const three=f.lastTypes.slice(-3).join(",");
  const special=three==="jab,cross,hook"||three==="jab,cross,uppercut";
- const comboFactor=1+Math.min(.48,(opponent.combo-1)*.085)+(special?.22:0);
- const zoneFactor=zone==="liver"?1.48:zone==="head"?1.25:1;
+ const comboFactor=1+Math.min(.28,(f.combo-1)*.047)+(special?.13:0);
+ const zoneFactor=zone==="liver"?1.31:zone==="head"?1.19:1;
  const damage=Math.round(d.damage*comboFactor*zoneFactor);
- opponent.health=clamp(opponent.health-damage,0,opponent.maxHealth);
- opponent.hits++;opponent.flinch=1;
- opponent.stagger+=zone==="head"?damage*1.2:damage*.87;
- opponent.impulse.add(new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw))
- .multiplyScalar((style==="hook"?6.9:style==="uppercut"?5.3:style==="cross"?4.6:2.2)*(1+Math.min(.4,opponent.combo*.035))));
- opponent.feetMotion=Math.min(1.3,opponent.feetMotion+.4);
- const nearRopes=Math.max(Math.abs(opponent.root.position.x),Math.abs(opponent.root.position.z))>3.75;
- if(nearRopes)opponent.edgePressure=Math.min(10,opponent.edgePressure+1);
+ f.health=clamp(f.health-damage,0,f.maxHealth);
+ f.hits++;f.flinch=1;
+ f.balance=clamp(f.balance+damage*(zone==="head"?.76:zone==="liver"?.48:.31),0,120);
+ f.fatigue=clamp(f.fatigue+damage*.17,0,100);
+ f.impulse.add(new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw))
+  .multiplyScalar((style==="hook"?5.5:style==="uppercut"?4.7:style==="cross"?4.1:2.0)*(1+Math.min(.3,f.combo*.035))));
+ f.feetMotion=Math.min(1.3,f.feetMotion+.32);
+ const nearRopes=Math.max(Math.abs(f.root.position.x),Math.abs(f.root.position.z))>3.75;
+ if(nearRopes)f.edgePressure=Math.min(10,f.edgePressure+1);
  if(zone==="head"){
-  opponent.headHits++;
-  damageTextures(zone,style,damage);
-  opponent.head.updateMatrixWorld(true);
-  const impact=opponent.head.localToWorld(new THREE.Vector3(rnd(-.24,.24),rnd(-.19,.2),-.44));
-  splatter(impact,style==="hook"||style==="uppercut"||opponent.combo>2);
+  f.headHits++;
+  const mark=damageTextures(zone,style,damage);
+  if(mark.bleeding&&Math.random()<(style==="jab"?.12:.35)){
+   f.head.updateMatrixWorld(true);
+   const point=f.head.localToWorld(new THREE.Vector3(rnd(-.2,.2),rnd(-.2,.1),-.39));
+   splatter(point,false);
+  }
  }else{
-  opponent.bodyHits++;
+  f.bodyHits++;
   damageTextures(zone,style,damage);
-  if(zone==="liver"||damage>=18){
-   opponent.torso.updateMatrixWorld(true);
-   const impact=opponent.torso.localToWorld(new THREE.Vector3(zone==="liver"?.28:0,-.06,-.39));
-   splatter(impact,damage>22);
+  if(zone==="liver"){
+   f.liverFlinch=Math.max(f.liverFlinch,rnd(.8,1.55));
+   f.stagger=Math.max(f.stagger,.55);
   }
  }
- shake=style==="jab"?.07:.13;
- const zoneText=zone==="head"?"ГОЛОВА":zone==="liver"?"ПЕЧЕНЬ":"КОРПУС";
- say((special?"КОМБИНАЦИЯ! ":"")+zoneText+" −"+damage,style==="jab"?.58:.9);
+ const power=style!=="jab",vulnerability=(f.maxHealth-f.health)/f.maxHealth;
+ const repeatedLiver=f.injuries.liver||0;
  let fallChance=0;
- if(zone==="liver")fallChance=.34+(style==="hook"?.2:style==="uppercut"?.12:style==="cross"?.08:0)+Math.min(.22,(opponent.combo-1)*.07);
- else if(zone==="head")fallChance=(style==="uppercut"?.13:style==="hook"?.10:.025)+(opponent.combo>=3?.18:0);
- else fallChance=opponent.stagger>=64?.2:0;
- if(special)fallChance+=.18;
- if(opponent.health<=0){
-  opponent.dead=true;opponent.knockCount++;opponent.knockTimer=999;
-  say("НОКАУТ!",2);audioHit(78,.25);
-  setTimeout(()=>finishBout("НОКАУТ!"),1400);
- }else if(Math.random()<Math.min(.84,fallChance)||opponent.stagger>=88)knockDown(zone==="liver");
- hud();audioHit(zone==="head"?115:155,style==="uppercut"?.18:.11);
+ if(power&&zone==="liver")
+  fallChance=.009+Math.min(.023,repeatedLiver*.0025)+vulnerability*.023;
+ if(power&&zone==="head")
+  fallChance=.004+Math.max(0,f.balance-65)*.00028+vulnerability*.022;
+ if(power&&f.balance>105)fallChance+=.012;
+ if(power&&nearRopes)fallChance+=.003;
+ // A rare early stoppage needs a meaningful clean shot and sufficient accumulated damage.
+ let suddenKO=0;
+ if(power&&zone==="head"&&f.headHits>=6)
+  suddenKO=.0013+vulnerability*.006+(f.balance>100?.003:0);
+ if(power&&zone==="liver"&&repeatedLiver>=5)
+  suddenKO=.0008+vulnerability*.0035;
+ const earlyFinish=f.health<=0||Math.random()<suddenKO;
+ if(earlyFinish){
+  f.dead=true;
+  f.knockCount++;
+  f.fallSide=Math.random()<.5?-1:1;
+  f.fallForward=rnd(1.1,1.48);
+  f.knockTimer=999;
+  say("ДОСРОЧНЫЙ НОКАУТ!",1.8);
+  audioHit(77,.23);
+  setTimeout(()=>finishBout("НОКАУТ!"),1800);
+ }else if(Math.random()<fallChance)knockDown(zone==="liver");
+ else if(zone==="liver")say("УДАР В ПЕЧЕНЬ",.8);
+ else say((special?"СЕРИЯ · ":"")+(zone==="head"?"ГОЛОВА":"КОРПУС"),.65);
+ shake=style==="jab"?.065:.12;
+ hud();audioHit(zone==="head"?116:146,style==="uppercut"?.17:.1);
 }
 function updatePunch(dt){
  if(player.rest>0)player.rest=Math.max(0,player.rest-dt);
@@ -624,45 +691,58 @@ function updateGloves(dt){
 }
 function updateOpponent(dt){
  const f=opponent;
- f.flinch=Math.max(0,f.flinch-dt*2.9);
- f.stagger=Math.max(0,f.stagger-dt*4);
+ f.flinch=Math.max(0,f.flinch-dt*3.8);
+ f.stagger=Math.max(0,f.stagger-dt*2.5);
+ f.balance=Math.max(0,f.balance-dt*15);
+ f.fatigue=Math.max(0,f.fatigue-dt*.65);
+ f.liverFlinch=Math.max(0,f.liverFlinch-dt);
  const prevX=f.root.position.x,prevZ=f.root.position.z;
- if(!f.dead&&f.knockTimer<=0)f.root.position.addScaledVector(f.impulse,dt);
- else f.root.position.addScaledVector(f.impulse,dt*.25);
+ f.root.position.addScaledVector(f.impulse,dt*(f.dead?.2:f.knockTimer>0?.35:1));
  f.root.position.x=clamp(f.root.position.x,-4.42,4.42);
  f.root.position.z=clamp(f.root.position.z,-4.42,4.42);
  if((f.root.position.x===-4.42&&f.impulse.x<0)||(f.root.position.x===4.42&&f.impulse.x>0))f.impulse.x*=-.1;
  if((f.root.position.z===-4.42&&f.impulse.z<0)||(f.root.position.z===4.42&&f.impulse.z>0))f.impulse.z*=-.1;
  const moved=Math.hypot(f.root.position.x-prevX,f.root.position.z-prevZ);
- f.feetMotion=lerp(f.feetMotion,Math.min(1,moved/Math.max(.0001,dt*3)),Math.min(1,dt*7));
- f.impulse.multiplyScalar(Math.exp(-2.8*dt));
- if(f.knockTimer>0)f.knockTimer=Math.max(0,f.knockTimer-dt);
+ f.feetMotion=lerp(f.feetMotion,Math.min(1,moved/Math.max(.0001,dt*3)),Math.min(1,dt*6));
+ f.impulse.multiplyScalar(Math.exp(-3.3*dt));
+ if(f.knockTimer>0&&!f.dead)f.knockTimer=Math.max(0,f.knockTimer-dt);
+ const falling=f.dead||f.knockTimer>1;
+ if(falling)f.fallProgress=Math.min(1,f.fallProgress+dt*1.65);
+ else f.fallProgress=Math.max(0,f.fallProgress-dt*.73);
+ const down=smooth(f.fallProgress);
+ const liverBrace=clamp(f.liverFlinch*2.0,0,1)*(1-down);
+ // Knees buckle first; the head and shoulders then lose their support.
+ f.legs[0].thigh.rotation.x=lerp(f.legs[0].thigh.rotation.x,.65*down,Math.min(1,dt*8));
+ f.legs[1].thigh.rotation.x=lerp(f.legs[1].thigh.rotation.x,.39*down,Math.min(1,dt*8));
+ f.legs[0].shin.rotation.x=lerp(f.legs[0].shin.rotation.x,-1.08*down,Math.min(1,dt*8));
+ f.legs[1].shin.rotation.x=lerp(f.legs[1].shin.rotation.x,-1.23*down,Math.min(1,dt*8));
+ f.visual.rotation.x=lerp(f.visual.rotation.x,down*f.fallForward+liverBrace*.19,Math.min(1,dt*8));
+ f.visual.rotation.z=lerp(f.visual.rotation.z,down*f.fallSide*.22+(1-down)*(f.flinch*.08+f.impulse.x*.02),Math.min(1,dt*7));
+ f.visual.position.y=lerp(f.visual.position.y,down*-.08,Math.min(1,dt*7));
+ f.torso.rotation.x=lerp(f.torso.rotation.x,down*.3+liverBrace*.25,Math.min(1,dt*8));
+ f.torso.rotation.z=lerp(f.torso.rotation.z,f.flinch*.13*(1-down),Math.min(1,dt*9));
+ f.head.rotation.x=lerp(f.head.rotation.x,down*.45-f.flinch*.18*(1-down),Math.min(1,dt*8));
+ f.head.rotation.z=lerp(f.head.rotation.z,down*f.fallSide*.28+f.flinch*.18*(1-down),Math.min(1,dt*8));
+ for(const [i,arm] of f.arms.entries()){
+  const side=i===0?-1:1;
+  const guardX=-.78,relaxX=.47,relaxZ=side*.68;
+  const holdLiver=i===1?liverBrace:0;
+  arm.upper.rotation.x=lerp(arm.upper.rotation.x,guardX*(1-down)*(1-holdLiver)+.85*holdLiver+relaxX*down,Math.min(1,dt*9));
+  arm.upper.rotation.z=lerp(arm.upper.rotation.z,side*.13*(1-down)-.56*holdLiver+relaxZ*down,Math.min(1,dt*8));
+  arm.elbow.rotation.x=lerp(arm.elbow.rotation.x,-.90*(1-down)*(1-holdLiver)-.55*holdLiver+.25*down,Math.min(1,dt*8));
+ }
+ if(f.feetMotion>.04&&down<.1)f.visual.position.y=.012+Math.sin(clock.elapsedTime*12)*.028*f.feetMotion;
  if(f.bleeding>0){
   f.bleedClock-=dt;
-  if(f.bleedClock<=0){
-   f.bleedClock=rnd(.55,1.6);
+  if(f.bleedClock<=0&&droplets.length<55){
+   f.bleedClock=rnd(1.2,3);
    f.head.updateMatrixWorld(true);
-   const jaw=f.head.localToWorld(new THREE.Vector3(rnd(-.1,.1),-.27,-.38));
-   streakParticle(jaw,false);
-   if(Math.random()<.7)spill(jaw.x+rnd(-.4,.4),jaw.z+rnd(-.4,.4),rnd(.028,.075));
+   let p;
+   if(f.activeWounds.nose)p=f.head.localToWorld(new THREE.Vector3(0,-.24,-.41));
+   else if(f.activeWounds.lip)p=f.head.localToWorld(new THREE.Vector3(0,-.28,-.35));
+   else p=f.head.localToWorld(new THREE.Vector3(.15,.06,-.33));
+   streakParticle(p,false);
   }
- }
- const knocked=f.knockTimer>0||f.dead;
- const targetTilt=knocked?1.48:0;
- f.visual.rotation.x=lerp(f.visual.rotation.x,targetTilt,Math.min(1,dt*(knocked?7:3.6)));
- f.visual.rotation.z=lerp(f.visual.rotation.z,knocked?-.13:f.flinch*.12+f.impulse.x*.024,Math.min(1,dt*6));
- f.visual.position.y=lerp(f.visual.position.y,knocked?.04:0,Math.min(1,dt*7));
- const motion=f.flinch;
- f.torso.rotation.z=lerp(f.torso.rotation.z,motion*.22,Math.min(1,dt*9));
- f.head.rotation.x=lerp(f.head.rotation.x,motion*-.23,Math.min(1,dt*9));
- f.head.rotation.z=lerp(f.head.rotation.z,motion*.25,Math.min(1,dt*9));
- f.arms[0].upper.rotation.x=lerp(f.arms[0].upper.rotation.x,-.78-motion*.6,Math.min(1,dt*8));
- f.arms[1].upper.rotation.x=lerp(f.arms[1].upper.rotation.x,-.78-motion*.6,Math.min(1,dt*8));
- f.arms[0].upper.rotation.z=-.13;f.arms[1].upper.rotation.z=.13;
- f.arms[0].elbow.rotation.x=-.9;
- f.arms[1].elbow.rotation.x=-.9;
- if(f.feetMotion>.04&&!knocked){
-  f.visual.position.y=.025+Math.sin(clock.elapsedTime*14)*.036*f.feetMotion;
  }
 }
 function updateDrops(dt){
@@ -816,8 +896,14 @@ function reset(){
  for(const drop of droplets)scene.remove(drop.mesh);droplets.length=0;
  opponent.root.position.copy(opponent.home);opponent.root.rotation.set(0,Math.PI,0);
  opponent.visual.position.set(0,0,0);opponent.visual.rotation.set(0,0,0);
+ opponent.torso.rotation.set(0,0,0);opponent.head.rotation.set(0,0,0);
+ for(const leg of opponent.legs){leg.thigh.rotation.set(0,0,0);leg.shin.rotation.set(0,0,0);}
+ for(const arm of opponent.arms){arm.upper.rotation.set(0,0,0);arm.elbow.rotation.set(0,0,0);}
  opponent.health=1000;opponent.impulse.set(0,0,0);opponent.dead=false;opponent.knockTimer=0;
- opponent.stagger=0;opponent.flinch=0;opponent.feetMotion=0;opponent.edgePressure=0;opponent.knockCount=0;opponent.headHits=0;
+ opponent.stagger=0;opponent.balance=0;opponent.fatigue=0;opponent.liverFlinch=0;
+ opponent.fallProgress=0;opponent.fallSide=1;opponent.fallForward=1.3;
+ opponent.injuries={};opponent.activeWounds={};
+ opponent.flinch=0;opponent.feetMotion=0;opponent.edgePressure=0;opponent.knockCount=0;opponent.headHits=0;
  opponent.bodyHits=0;opponent.bleeding=0;opponent.bleedClock=0;opponent.combo=0;opponent.lastHitTime=-10;
  for(const surface of [opponent.faceDamage,opponent.noseDamage,opponent.torsoDamage,opponent.shoulderDamage,opponent.shortsDamage]){
   surface.ctx.clearRect(0,0,512,512);surface.texture.needsUpdate=true;
