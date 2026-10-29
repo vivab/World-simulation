@@ -119,7 +119,7 @@ for(const p of [[-5,10,-5],[5,10,-5],[-5,10,5],[5,10,5]]){
  const spot=new THREE.SpotLight(0xffdfb8,70,25,.75,.45,1.7);spot.position.set(...p);
  spot.target.position.set(0,.5,0);scene.add(spot,spot.target);
 }
-const mat=(color,metal=0)=>new THREE.MeshStandardMaterial({color,roughness:metal?.53:.93,metalness:metal,flatShading:true});
+const mat=(color,metal=0)=>new THREE.MeshStandardMaterial({color,roughness:metal?.53:.93,metalness:metal,flatShading:false});
 const mats={floor:mat(0x27252a),stone:mat(0x4b4549),black:mat(0x19191e),steel:mat(0x6b7079,.57),
 ring:mat(0x485260),edge:mat(0x292c35),red:mat(0xab2f3c),blue:mat(0x2f6189),white:mat(0xc7b8ac),
 skin:mat(0xb99578),hair:mat(0x29262a),shorts:mat(0x52434a),boot:mat(0x25272e),gold:mat(0xab8b5b)};
@@ -127,11 +127,35 @@ function box(parent,w,h,d,m,x=0,y=0,z=0){
  const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),typeof m==="number"?mat(m):m);
  o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;
 }
+function smoothBox(parent,w,h,d,m,x=0,y=0,z=0,r=.12){
+ const radius=Math.min(r,w*.48,h*.48,d*.48);
+ const g=new THREE.BoxGeometry(w,h,d,5,5,5);
+ const p=g.getAttribute("position");
+ const normals=new Float32Array(p.count*3);
+ const q=new THREE.Vector3(),v=new THREE.Vector3(),n=new THREE.Vector3();
+ const half=new THREE.Vector3(w*.5-radius,h*.5-radius,d*.5-radius);
+ for(let i=0;i<p.count;i++){
+  v.fromBufferAttribute(p,i);
+  q.set(clamp(v.x,-half.x,half.x),clamp(v.y,-half.y,half.y),clamp(v.z,-half.z,half.z));
+  n.copy(v).sub(q).normalize();
+  p.setXYZ(i,q.x+n.x*radius,q.y+n.y*radius,q.z+n.z*radius);
+  normals[i*3]=n.x;normals[i*3+1]=n.y;normals[i*3+2]=n.z;
+ }
+ g.setAttribute("normal",new THREE.BufferAttribute(normals,3));
+ p.needsUpdate=true;g.computeBoundingSphere();
+ const o=new THREE.Mesh(g,typeof m==="number"?mat(m):m);
+ o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;
+}
+function oval(parent,w,h,d,m,x=0,y=0,z=0){
+ const o=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),typeof m==="number"?mat(m):m);
+ o.scale.set(w*.5,h*.5,d*.5);
+ o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;
+}
 function ico(parent,r,m,x=0,y=0,z=0,detail=1){
  const o=new THREE.Mesh(new THREE.IcosahedronGeometry(r,detail),typeof m==="number"?mat(m):m);
  o.position.set(x,y,z);o.castShadow=true;parent.add(o);return o;
 }
-function cylinder(parent,r1,r2,h,m,x=0,y=0,z=0,n=8){
+function cylinder(parent,r1,r2,h,m,x=0,y=0,z=0,n=16){
  const o=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,n),typeof m==="number"?mat(m):m);
  o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;
 }
@@ -201,10 +225,10 @@ const tempV=new THREE.Vector3();
 function boxingGlove(parent,side,color){
  const g=new THREE.Group();parent.add(g);
  const gloveMat=mat(color),cuff=mat(color===0x345f93?0x24496e:0x6f222b);
- box(g,.28,.25,.34,cuff,0,-.03,.16);
- ico(g,.31,gloveMat,0,.05,-.19,1).scale.set(1.08,.95,1.14);
- ico(g,.13,gloveMat,side*.24,-.11,-.18,0);
- box(g,.22,.04,.06,mats.white,0,-.08,.34);
+ smoothBox(g,.25,.23,.30,cuff,0,-.03,.14,.075);
+ oval(g,.60,.52,.67,gloveMat,0,.05,-.19);
+ oval(g,.21,.18,.25,gloveMat,side*.20,-.10,-.18);
+ smoothBox(g,.19,.035,.05,mats.white,0,-.085,.32,.015);
  return g;
 }
 
@@ -374,58 +398,61 @@ function makeOpponent(){
  const root=new THREE.Group();scene.add(root);
  const visual=new THREE.Group();root.add(visual);
  const torso=new THREE.Group();visual.add(torso);torso.position.set(0,1.48,0);
- box(torso,.93,1.04,.54,mats.skin,0,.19,0);
+ smoothBox(torso,.87,1.00,.49,mats.skin,0,.19,0,.20);
  const muscles=mat(0xa87e68),warmSkin=mat(0xc1a187);
  for(const side of [-1,1]){
-  const pec=box(torso,.42,.34,.08,warmSkin,side*.225,.44,-.30);
-  pec.rotation.z=-side*.045;
-  box(torso,.16,.3,.028,muscles,side*.3,-.035,-.284);
+  const pec=oval(torso,.39,.27,.13,warmSkin,side*.215,.42,-.235);
+  pec.rotation.z=-side*.05;
+  oval(torso,.12,.27,.035,muscles,side*.26,-.025,-.263);
  }
- box(torso,.12,.07,.025,0x906e5d,0,-.16,-.285);
- box(torso,1.08,.19,.56,mats.shorts,0,-.39,0);
+ oval(torso,.08,.04,.018,0x906e5d,0,-.16,-.269);
+ smoothBox(torso,.97,.17,.54,mats.shorts,0,-.39,0,.07);
  for(const sx of [-1,1]){
-  ico(torso,.25,mats.skin,sx*.35,.53,-.01,1).scale.set(1,1,.84);
-  box(torso,.27,.09,.15,0x624b40,sx*.24,.39,-.282);
+  oval(torso,.37,.37,.37,mats.skin,sx*.345,.52,-.01);
+  oval(torso,.19,.045,.085,0x826858,sx*.22,.35,-.294);
  }
  const shorts=mat(0x443c48),stripe=mat(0xc6b9ad);
  const legs=[];
- box(visual,1.02,.56,.57,shorts,0,.82,0);
+ smoothBox(visual,.92,.53,.54,shorts,0,.82,0,.09);
  for(const sx of [-1,1]){
-  box(visual,.08,.56,.6,stripe,sx*.47,.83,0);
-  const thigh=new THREE.Group();thigh.position.set(sx*.28,.74,0);visual.add(thigh);
-  box(thigh,.42,.63,.42,mats.skin,0,-.28,0);
+  smoothBox(visual,.05,.45,.48,stripe,sx*.445,.84,0,.02);
+  const thigh=new THREE.Group();thigh.position.set(sx*.255,.74,0);visual.add(thigh);
+  cylinder(thigh,.155,.19,.62,mats.skin,0,-.29,0,18);
+  oval(thigh,.35,.33,.35,mats.skin,0,-.60,0);
   const shin=new THREE.Group();shin.position.set(0,-.58,0);thigh.add(shin);
-  box(shin,.33,.46,.33,mats.skin,0,-.25,0);
-  box(shin,.38,.3,.48,mats.boot,0,-.48,-.07);
+  cylinder(shin,.145,.125,.47,mats.skin,0,-.245,0,18);
+  oval(shin,.29,.21,.29,mats.skin,0,-.42,0);
+  smoothBox(shin,.32,.25,.46,mats.boot,0,-.52,-.08,.09);
   legs.push({thigh,shin});
  }
  const arms=[];
  for(const side of [-1,1]){
-  const upper=new THREE.Group();upper.position.set(side*.62,2.03,0);visual.add(upper);
-  ico(upper,.23,mats.skin,0,0,0,1);
-  box(upper,.3,.53,.34,mats.skin,0,-.23,0);
+  const upper=new THREE.Group();upper.position.set(side*.59,2.03,0);visual.add(upper);
+  oval(upper,.3,.33,.30,mats.skin,0,0,0);
+  cylinder(upper,.135,.153,.5,mats.skin,0,-.245,0,18);
   const elbow=new THREE.Group();elbow.position.y=-.46;upper.add(elbow);
-  box(elbow,.27,.44,.3,mats.skin,0,-.22,0);
+  oval(elbow,.26,.23,.26,mats.skin,0,0,0);
+  cylinder(elbow,.13,.115,.43,mats.skin,0,-.22,0,18);
   const glove=boxingGlove(elbow,side,0x9b343d);
   glove.position.set(0,-.53,-.06);arms.push({upper,elbow,glove});
  }
- const neck=cylinder(visual,.14,.16,.24,mats.skin,0,2.06,0);
+ const neck=cylinder(visual,.12,.145,.23,mats.skin,0,2.06,0,18);
  const head=new THREE.Group();head.position.set(0,2.46,0);visual.add(head);
- box(head,.63,.7,.62,mats.skin);
- box(head,.66,.19,.65,mats.hair,0,.37,0);
- box(head,.64,.12,.24,mats.hair,0,.34,-.22);
+ smoothBox(head,.61,.69,.6,mats.skin,0,0,0,.16);
+ smoothBox(head,.63,.17,.62,mats.hair,0,.35,0,.075);
+ smoothBox(head,.58,.11,.18,mats.hair,0,.34,-.21,.04);
  for(const x of [-.18,.18]){
   box(head,.12,.045,.026,mats.black,x,.09,-.325);
   box(head,.17,.04,.023,mats.hair,x,.19,-.324);
  }
- box(head,.17,.19,.13,mats.skin,0,-.07,-.36);
- box(head,.27,.04,.024,0x623b36,0,-.24,-.326);
- for(const x of [-.33,.33])ico(head,.14,mats.skin,x,-.015,0,1);
- const faceDamage=createDamageSurface(head,.625,.68,0,0,-.365);
- const noseDamage=createDamageSurface(head,.2,.21,0,-.07,-.45);
- const torsoDamage=createDamageSurface(torso,.89,.95,0,.18,-.36);
- const shoulderDamage=createDamageSurface(torso,.87,.28,0,.67,-.31);
- const shortsDamage=createDamageSurface(visual,.83,.47,0,.86,-.31);
+ smoothBox(head,.145,.19,.135,mats.skin,0,-.07,-.352,.047);
+ oval(head,.23,.035,.024,0x623b36,0,-.235,-.321);
+ for(const x of [-.30,.30])oval(head,.17,.24,.17,mats.skin,x,-.015,0);
+ const faceDamage=createDamageSurface(head,.60,.68,0,0,-.325);
+ const noseDamage=createDamageSurface(head,.18,.21,0,-.07,-.44);
+ const torsoDamage=createDamageSurface(torso,.82,.94,0,.18,-.278);
+ const shoulderDamage=createDamageSurface(torso,.82,.27,0,.67,-.265);
+ const shortsDamage=createDamageSurface(visual,.79,.45,0,.86,-.286);
  const bloodMarks=[];
  const bruise=ico(head,.15,0x5a365a,-.22,-.05,-.33,1);
  bruise.scale.set(1.1,.65,.12);bruise.visible=false;
@@ -435,7 +462,7 @@ function makeOpponent(){
    fallProgress:0,fallSide:1,fallForward:1.3,liverFlinch:0,balance:0,fatigue:0,
    injuries:{},activeWounds:{},headHits:0,bodyHits:0,bleeding:0,bleedClock:0,combo:0,lastHitTime:-10,lastTypes:[],hits:0};
 }
-const opponent=makeOpponent();opponent.root.position.copy(opponent.home);opponent.root.rotation.y=Math.PI;opponent.visual.scale.set(.83,1,.82);
+const opponent=makeOpponent();opponent.root.position.copy(opponent.home);opponent.root.rotation.y=Math.PI;opponent.visual.scale.set(.79,1,.77);
 const player={position:new THREE.Vector3(0,RING_Y,3.6),yaw:0,pitch:0,health:1000,hookSide:1,
   walking:0,step:0,slip:0,slipDisplay:0,punch:null,rest:0,hits:0};
 const ROUND_SECONDS=180,MAX_ROUNDS=12;
@@ -465,7 +492,7 @@ camera.position.set(0,RING_Y+2.16,3.6);
 const hands=new THREE.Group();camera.add(hands);
 const UP=new THREE.Vector3(0,1,0);
 function armSegment(parent,r,m){
- const o=new THREE.Mesh(new THREE.CylinderGeometry(r*.92,r,1,8),m);
+ const o=new THREE.Mesh(new THREE.CylinderGeometry(r*.92,r,1,16),m);
  o.frustumCulled=false;o.castShadow=false;parent.add(o);return o;
 }
 function setArmSegment(mesh,a,b){
@@ -477,9 +504,9 @@ function setArmSegment(mesh,a,b){
 function viewArm(side,color){
  const root=new THREE.Group();hands.add(root);
  const sleeve=mat(0x41566a),skin=mat(0xb88f72),wrap=mat(0x2b486e);
- const upper=armSegment(root,.16,sleeve),forearm=armSegment(root,.126,skin),wrist=armSegment(root,.14,wrap);
+ const upper=armSegment(root,.135,sleeve),forearm=armSegment(root,.108,skin),wrist=armSegment(root,.12,wrap);
  const glove=boxingGlove(root,side,color);
- glove.scale.setScalar(.93);
+ glove.scale.setScalar(.89);
  glove.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.castShadow=false}});
  return {root,upper,forearm,wrist,glove,side};
 }
@@ -487,9 +514,9 @@ const left=viewArm(-1,0x345f93),right=viewArm(1,0x345f93);
 let guardBreath=0;
 function armPose(arm,t,style,bob){
  const side=arm.side;
- const shoulder=new THREE.Vector3(side*.37,-.65,.14);
- const elbow=new THREE.Vector3(side*.5,-.53+bob*.5,-.30);
- const wrist=new THREE.Vector3(side*.29,-.29+bob,-.74+(side<0?-.12:0));
+ const shoulder=new THREE.Vector3(side*.345,-.65,.14);
+ const elbow=new THREE.Vector3(side*.46,-.53+bob*.5,-.30);
+ const wrist=new THREE.Vector3(side*.28,-.29+bob,-.74+(side<0?-.12:0));
  if(t>0){
   if(style==="jab"||style==="cross"){
    wrist.x=lerp(wrist.x,side*.15,t);
@@ -618,8 +645,8 @@ function hitZone(){
   return v.addScaledVector(forward,-t).lengthSq()<radius*radius;
  }
  const h=opponent.head.getWorldPosition(new THREE.Vector3());
- const liver=opponent.root.localToWorld(new THREE.Vector3(.32,1.48,-.36));
- const torso=opponent.root.localToWorld(new THREE.Vector3(0,1.65,-.10));
+ const liver=opponent.root.localToWorld(new THREE.Vector3(.30,1.48,-.29));
+ const torso=opponent.root.localToWorld(new THREE.Vector3(0,1.65,-.20));
  if(check(h,.44))return "head";
  if(check(liver,.285))return "liver";
  if(check(torso,.61))return "body";
