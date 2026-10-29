@@ -232,10 +232,13 @@ const tempV=new THREE.Vector3();
 function boxingGlove(parent,side,color){
  const g=new THREE.Group();parent.add(g);
  const gloveMat=mat(color),cuff=mat(color===0x345f93?0x24496e:0x6f222b);
- smoothBox(g,.25,.23,.30,cuff,0,-.03,.14,.075);
- oval(g,.60,.52,.67,gloveMat,0,.05,-.19);
- oval(g,.21,.18,.25,gloveMat,side*.20,-.10,-.18);
- smoothBox(g,.19,.035,.05,mats.white,0,-.085,.32,.015);
+ smoothBox(g,.25,.20,.27,cuff,0,-.07,.11,.06);
+ oval(g,.46,.36,.47,gloveMat,0,.05,-.15);
+ oval(g,.16,.16,.22,gloveMat,side*.18,-.10,-.16);
+ for(let i=0;i<4;i++){
+  oval(g,.095,.12,.17,mats.skin,(i-1.5)*.105,-.065,-.34);
+ }
+ smoothBox(g,.18,.027,.045,mats.white,0,-.095,.23,.011);
  return g;
 }
 
@@ -675,7 +678,13 @@ function hitZone(){
  return null;
 }
 function isFacingOpponent(range=2.2,threshold=.55){
- const d=opponent.root.position.clone().sub(player.position);d.y=0;
+ let target=opponent.root.position;
+ // When prone, target the visible head/upper body rather than the original standing root.
+ if(opponent.knockTimer>1&&opponent.fallProgress>.5){
+  opponent.head.updateWorldMatrix(true,false);
+  target=opponent.root.position.clone().lerp(opponent.head.getWorldPosition(new THREE.Vector3()),.69);
+ }
+ const d=target.clone().sub(player.position);d.y=0;
  const len=d.length();
  if(len>range||len<.06)return false;
  return (d.x*(-Math.sin(player.yaw))+d.z*(-Math.cos(player.yaw)))/len>threshold;
@@ -841,7 +850,7 @@ function updatePunch(dt){
  }
  if(a.t>=a.duration)player.punch=null;
 }
-const viewLegs=new THREE.Group();camera.add(viewLegs);
+const viewLegs=new THREE.Group();camera.add(viewLegs);viewLegs.visible=false;
 function makeViewLeg(side){
  const g=new THREE.Group();viewLegs.add(g);
  const thigh=armSegment(g,.18,mat(0x3e475a));
