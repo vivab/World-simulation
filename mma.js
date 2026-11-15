@@ -211,11 +211,11 @@ function botAI(dt){
   const pThreat=p.attack&&p.at<ATT[p.attack].time*.68;
   e.aiGuard=pThreat&&dist<197&&Math.random()<.61;
   e.aiSlip=pThreat&&dist<155&&Math.random()<.21?1:0;
-  if(isPDown) e.aiMove=dist>104?-1:0;
+  if(isPDown) e.aiMove=dist>104?1:0;
   else if(e.down>0)e.aiMove=0;
-  else if(dist>165)e.aiMove=-1;
-  else if(dist<93)e.aiMove=adv||e.st<25?1:Math.random()>.6?1:0;
-  else e.aiMove=Math.random()<.17?1:Math.random()<.65?-1:0;
+  else if(dist>165)e.aiMove=1;
+  else if(dist<93)e.aiMove=adv||e.st<25?-1:Math.random()>.6?-1:0;
+  else e.aiMove=Math.random()<.17?-1:Math.random()<.65?1:0;
   e.aiChoice=Math.random();
  }
  e.guard=e.aiGuard&&!e.attack&&e.down<=0&&e.st>4;
