@@ -12,7 +12,7 @@ const ATT={
  hook:{time:.62,start:.39,end:.66,reach:118,cost:12,damage:12.8,zone:"head",stun:.24},
  kick:{time:.82,start:.43,end:.72,reach:186,cost:17,damage:15.4,zone:"head",stun:.28},
  low:{time:.68,start:.39,end:.67,reach:186,cost:11,damage:9.1,zone:"leg",stun:.17},
- grab:{time:.87,start:.35,end:.7,reach:106,cost:20,damage:4,zone:"body",stun:.3}
+ grab:{time:.87,start:.35,end:.7,reach:145,cost:20,damage:4,zone:"body",stun:.3}
 };
 const palettes=[
  {skin:"#c99877",shade:"#714330",lit:"#ecc6a2",short:"#b64037",trim:"#ff9b79",glove:"#c4463d",hair:"#29201b"},
@@ -89,7 +89,7 @@ function hit(attacker,defender,type){
  if(dist>a.reach+(ground?42:0)||attacker.face*(defender.x-attacker.x)<-18)return;
  if(ground&&type==="kick"||ground&&type==="low"||ground&&type==="grab")return;
  if(type==="grab"&&!ground){
-  if(dist>106||defender.st>25&&defender.guard&&Math.random()<.65){
+  if(dist>145||defender.st>25&&defender.guard&&Math.random()<.65){
    tip("TAKEDOWN DEFENDED","GOOD SPRAWL",.7);attacker.st=Math.max(0,attacker.st-9);return;
   }
   defender.hp=Math.max(1,defender.hp-4);defender.body+=9;defender.down=6.7;defender.downMax=6.7;defender.knockdowns++;
