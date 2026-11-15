@@ -21,7 +21,7 @@ const palettes=[
 class Fighter{
  constructor(id){
   this.id=id;this.name=id===0?"PLAYER":"CHALLENGER";this.x=id===0?435:845;this.face=id===0?1:-1;
-  this.color=palettes[id];this.hp=100;this.st=100;this.head=0;this.body=0;this.leg=0;this.score=0;this.hits=0;
+  this.color=palettes[id];this.hp=100;this.st=100;this.head=0;this.body=0;this.leg=0;this.score=0;this.roundScore=0;this.hits=0;
   this.rounds=0;this.knockdowns=0;this.vx=0;this.stun=0;this.heat=0;this.recoil=0;this.guard=false;this.slip=0;
   this.attack=null;this.at=0;this.didHit=false;this.down=0;this.downMax=0;this.ko=false;this.getup=0;this.steps=0;
   this.aiClock=0;this.aiMove=0;this.aiGuard=0;this.aiChoice=0;this.aiSlip=0;this.top=0;this.cut=0;
@@ -29,7 +29,7 @@ class Fighter{
  resetRound(){
   this.x=this.id===0?435:845;this.face=this.id===0?1:-1;this.vx=0;this.st=100;this.stun=0;
   this.attack=null;this.at=0;this.didHit=false;this.down=0;this.downMax=0;this.top=0;
-  this.guard=false;this.slip=0;this.aiClock=.2;this.aiMove=0;
+  this.roundScore=0;this.guard=false;this.slip=0;this.aiClock=.2;this.aiMove=0;
  }
 }
 const p=new Fighter(0),e=new Fighter(1);
@@ -93,7 +93,7 @@ function hit(attacker,defender,type){
    tip("TAKEDOWN DEFENDED","GOOD SPRAWL",.7);attacker.st=Math.max(0,attacker.st-9);return;
   }
   defender.hp=Math.max(1,defender.hp-4);defender.body+=9;defender.down=6.7;defender.downMax=6.7;defender.knockdowns++;
-  defender.stun=.4;attacker.top=1.1;attacker.score+=10;
+  defender.stun=.4;attacker.top=1.1;attacker.score+=10;attacker.roundScore+=10;
   spawnFX(defender.x,FLOOR-40,13,"#e6bd87",1.3);
   sound(62,.26,"sawtooth",.12);tip("TAKEDOWN","GROUND CONTROL",1.1);
   return;
@@ -128,7 +128,7 @@ function hit(attacker,defender,type){
    tip(type==="kick"?"HEAD KICK!":type==="hook"?"CLEAN HOOK!":"SOLID SHOT!", "",.35);
  }
  defender.hp=clamp(defender.hp-damage,0,100);
- attacker.score+=damage*(defended?.3:1.3);attacker.hits++;
+ attacker.score+=damage*(defended?.3:1.3);attacker.roundScore+=damage*(defended?.3:1.3);attacker.hits++;
  if(defender.hp<=0||(defender.head>88&&Math.random()<.13)){
   knockout(attacker,defender);return;
  }
@@ -171,7 +171,7 @@ function resetMatch(){
  sound(320,.17,"sine",.06);
 }
 function decideRound(){
- const pw=p.score+p.hp*.2,ew=e.score+e.hp*.2;
+ const pw=p.roundScore+p.hp*.2,ew=e.roundScore+e.hp*.2;
  const victor=pw>=ew?p:e;victor.rounds++;
  if(victor.rounds>=2||match.round>=3){
   match.winner=p.rounds===e.rounds?(p.score>=e.score?p:e):(p.rounds>e.rounds?p:e);
@@ -227,7 +227,7 @@ function botAI(dt){
  const near=dist<185;
  if(isPDown&&dist<150){
   if(Math.random()<dt*2.7)pressAttack(e,Math.random()<.6?"cross":"jab");
- }else if(near&&!isPDown&&Math.random()<dt*(e.st>30?2.4:1.0)){
+ }else if(near&&!isPDown&&Math.random()<dt*(e.st>30?1.65:.83)){
   const r=Math.random();
   const choice=(dist<103&&r<.18)?"grab":r<.25?"jab":r<.5?"cross":r<.68?"hook":r<.83?"low":"kick";
   if(dist<ATT[choice].reach)pressAttack(e,choice);
