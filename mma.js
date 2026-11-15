@@ -369,8 +369,47 @@ function drawDown(f){
  head(f,100,-35);
  ctx.restore();
 }
+
+function drawGroundAttacker(f){
+ const c=f.color,dir=f.face;
+ const attacking=f.attack&&(f.attack==="jab"||f.attack==="cross"||f.attack==="hook");
+ const phase=attacking?f.at/ATT[f.attack].time:0;
+ const strike=attacking?Math.sin(clamp((phase-.04)/.89,0,1)*PI):0;
+ ctx.save();ctx.translate(f.x,FLOOR);ctx.scale(dir,1);
+ ellipse(-12,7,86,13,"#020409a8");
+ // rear knee planted, lead foot supporting balance
+ limb(-33,-75,-85,-24,35,29,c.skin,c.shade);
+ limb(-85,-24,-102,-4,30,20,c.skin,c.shade);
+ shoe(-101,-5);
+ limb(-26,-72,20,-30,37,28,c.skin,c.shade);
+ limb(20,-30,26,-5,27,21,c.skin,c.shade);
+ shoe(27,-3);
+ poly([[-60,-99],[-2,-109],[16,-67],[-45,-52]],
+  grad(-40,-96,12,-65,c.short,"#1c202b"),"#14151d",2);
+ ctx.strokeStyle=c.trim;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-53,-98);ctx.lineTo(-5,-104);ctx.stroke();
+ // torso leaning over the knocked-down opponent
+ poly([[-35,-99],[6,-154],[56,-143],[51,-106],[8,-80]],
+  grad(-35,-139,56,-101,c.shade,c.lit),"#4c312b",2.2);
+ ctx.strokeStyle="#835743aa";ctx.lineWidth=2;ctx.beginPath();
+ ctx.moveTo(7,-141);ctx.lineTo(12,-99);ctx.moveTo(26,-126);ctx.lineTo(43,-116);ctx.stroke();
+ // supporting rear arm
+ limb(3,-147,36,-97,28,23,c.skin,c.shade);
+ limb(36,-97,64,-54,22,18,c.skin,c.shade);
+ glove(68,-53,c.glove);
+ limb(57,-143,69,-157,21,20,c.skin,c.shade);
+ head(f,75,-177);
+ // striking arm angles down toward the opponent, rather than punching in the air
+ let ex=86+strike*42,ey=-69+strike*31;
+ limb(53,-135,83+strike*14,-104+strike*12,28,23,c.skin,c.shade);
+ limb(83+strike*14,-104+strike*12,ex,ey,23,18,c.skin,c.shade);
+ glove(ex,ey,c.glove);
+ ctx.restore();
+}
+
 function drawFighter(f){
  if(f.down>0){drawDown(f);return;}
+ const opponent=f===p?e:p;
+ if(opponent.down>0&&Math.abs(f.x-opponent.x)<160&&!f.ko){drawGroundAttacker(f);return;}
  const c=f.color,dir=f.face,move=clamp(Math.abs(f.vx)/190,0,1),
   walk=Math.sin(f.steps*1.9),wob=Math.cos(f.steps*1.9),
   attack=f.attack,progress=attack?f.at/ATT[attack].time:0,
